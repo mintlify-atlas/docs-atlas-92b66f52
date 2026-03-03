@@ -139,44 +139,110 @@ Browser and TLS emulation configuration.
 
 Job execution limits and timeout configuration.
 
-<ParamField path="max_cpm" type="u32">
-  Maximum checks per minute (0 = unlimited)
+<ParamField path="threads" type="u32">
+  Number of concurrent worker threads
+  
+  **Default:** `1`
+</ParamField>
+
+<ParamField path="skip" type="u32">
+  Skip the first N data lines
   
   **Default:** `0`
 </ParamField>
 
-<ParamField path="timeout_ms" type="u64">
-  Per-credential execution timeout (milliseconds)
+<ParamField path="take" type="u32">
+  Maximum data lines to process (0 = all)
   
-  **Default:** `60000`
+  **Default:** `0`
+</ParamField>
+
+<ParamField path="continue_statuses" type="Vec&lt;BotStatus&gt;">
+  Statuses that re-queue the data line (e.g., `["Retry"]`)
+  
+  **Default:** `[]`
+</ParamField>
+
+<ParamField path="custom_status_name" type="string">
+  Custom label for Custom result status
+  
+  **Default:** `""`
 </ParamField>
 
 <ParamField path="max_retries" type="u32">
-  Max retry attempts for failed credentials
+  Max retry attempts per data line before marking as error
   
   **Default:** `0`
+</ParamField>
+
+<ParamField path="concurrent_per_proxy" type="u32">
+  Maximum concurrent uses per proxy (0 = unlimited)
+  
+  **Default:** `0`
+</ParamField>
+
+<ParamField path="start_threads_gradually" type="bool">
+  Start threads gradually instead of all at once
+  
+  **Default:** `false`
+</ParamField>
+
+<ParamField path="gradual_delay_ms" type="u32">
+  Delay between starting each thread (milliseconds)
+  
+  **Default:** `1000`
 </ParamField>
 
 ## OutputSettings
 
 Result output configuration.
 
-<ParamField path="save_hits" type="bool">
-  Whether to save successful hits to disk
+<ParamField path="save_to_file" type="bool">
+  Save hits to text files
   
   **Default:** `true`
 </ParamField>
 
-<ParamField path="save_fails" type="bool">
-  Whether to save failed attempts
+<ParamField path="save_to_database" type="bool">
+  Save hits to SQLite database
   
   **Default:** `false`
 </ParamField>
 
-<ParamField path="output_format" type="string">
-  Output file format: `"txt"`, `"json"`, `"csv"`
+<ParamField path="include_response" type="bool">
+  Include full response body in output (debug mode)
   
-  **Default:** `"txt"`
+  **Default:** `false`
+</ParamField>
+
+<ParamField path="output_directory" type="string">
+  Output directory for result files
+  
+  **Default:** `"results"`
+</ParamField>
+
+<ParamField path="output_format" type="string">
+  Custom output format template
+  
+  **Default:** `"{data} | {captures}"`
+</ParamField>
+
+<ParamField path="database_path" type="string">
+  SQLite database file path
+  
+  **Default:** `""`
+</ParamField>
+
+<ParamField path="output_format_type" type="OutputFormat">
+  Output file format: `Txt`, `Csv`, `Json`
+  
+  **Default:** `Txt`
+</ParamField>
+
+<ParamField path="capture_filters" type="Vec&lt;CaptureFilter&gt;">
+  Filters applied before writing output
+  
+  **Default:** `[]`
 </ParamField>
 
 ## Example pipeline
