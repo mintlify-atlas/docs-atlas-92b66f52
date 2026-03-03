@@ -1,0 +1,532 @@
+---
+title: 'Utility Blocks'
+description: 'Logging, webhooks, websockets, file operations, and helper utilities'
+---
+
+## Overview
+
+Utility blocks provide supporting functionality:
+
+- **Log**: Debug output and message logging
+- **Script**: Custom JavaScript execution
+- **Plugin**: Load custom plugin blocks
+- **Webhook**: Send HTTP webhooks
+- **WebSocket**: WebSocket communication
+- **FileSystem**: File and folder operations
+- **RandomUserAgent**: Generate realistic user agents
+- **RandomData**: Generate random test data
+- **ClearCookies**: Clear cookie jar
+- **Constants**: Define constant values
+- **Dictionary**: Key-value storage operations
+- **GenerateGUID**: Generate UUIDs
+- **PhoneCountry**: Extract country from phone numbers
+
+## Log
+
+Output messages to the console for debugging.
+
+### Settings
+
+<ParamField path="message" type="string" required>
+  Message to log (supports variable interpolation)
+</ParamField>
+
+### Example
+
+```json
+{
+  "block_type": "Log",
+  "label": "Debug Output",
+  "settings": {
+    "type": "Log",
+    "message": "User: <input.USER>, Response: <data.RESPONSECODE>, Token: <data.TOKEN>"
+  }
+}
+```
+
+## Webhook
+
+Send HTTP webhook notifications.
+
+### Settings
+
+<ParamField path="url" type="string" required>
+  Webhook URL
+</ParamField>
+
+<ParamField path="method" type="string" default="POST">
+  HTTP method (GET, POST, PUT)
+</ParamField>
+
+<ParamField path="headers" type="array">
+  Custom headers as `[name, value]` tuples
+</ParamField>
+
+<ParamField path="body_template" type="string">
+  Request body with variable interpolation
+</ParamField>
+
+<ParamField path="content_type" type="string" default="application/json">
+  Content-Type header value
+</ParamField>
+
+<ParamField path="custom_cookies" type="string">
+  Custom cookies (one per line: `name=value`)
+</ParamField>
+
+### Example
+
+```json
+{
+  "block_type": "Webhook",
+  "label": "Discord Notification",
+  "settings": {
+    "type": "Webhook",
+    "url": "https://discord.com/api/webhooks/...",
+    "method": "POST",
+    "body_template": "{\"content\":\"Found valid account: <input.USER>\"}",
+    "content_type": "application/json"
+  }
+}
+```
+
+## WebSocket
+
+Communicate via WebSocket connections.
+
+### Settings
+
+<ParamField path="url" type="string" required>
+  WebSocket URL (ws:// or wss://)
+</ParamField>
+
+<ParamField path="action" type="string" required>
+  WebSocket action:
+  - `connect` - Open connection
+  - `send` - Send message
+  - `receive` - Receive message
+  - `close` - Close connection
+</ParamField>
+
+<ParamField path="message" type="string">
+  Message to send (for `send` action)
+</ParamField>
+
+<ParamField path="output_var" type="string" default="WS_RESPONSE">
+  Variable name to store received data
+</ParamField>
+
+<ParamField path="timeout_ms" type="number" default="10000">
+  Operation timeout
+</ParamField>
+
+### Example
+
+```json
+{
+  "block_type": "WebSocket",
+  "label": "Connect to WS",
+  "settings": {
+    "type": "WebSocket",
+    "url": "wss://stream.example.com/feed",
+    "action": "connect"
+  }
+}
+```
+
+## FileSystem
+
+Perform file and folder operations.
+
+### Settings
+
+<ParamField path="op" type="FileSystemOp" required>
+  File operation:
+  - `FileRead` - Read file contents
+  - `FileWrite` - Write file
+  - `FileAppend` - Append to file
+  - `FileDelete` - Delete file
+  - `FileExists` - Check if file exists
+  - `FileCopy` - Copy file
+  - `FileMove` - Move/rename file
+  - `FileReadBytes` - Read as binary
+  - `FileWriteBytes` - Write binary data
+  - `FileReadLines` - Read as line array
+  - `FileWriteLines` - Write line array
+  - `FileAppendLines` - Append lines
+  - `CreatePath` - Create directory
+  - `FolderDelete` - Delete directory
+  - `FolderExists` - Check if folder exists
+  - `GetFilesInFolder` - List files
+</ParamField>
+
+<ParamField path="path" type="string" required>
+  File or folder path
+</ParamField>
+
+<ParamField path="dest_path" type="string">
+  Destination path (for Copy/Move operations)
+</ParamField>
+
+<ParamField path="content" type="string">
+  Content to write (for Write/Append operations)
+</ParamField>
+
+<ParamField path="encoding" type="string" default="utf8">
+  Text encoding (utf8, ascii, etc.)
+</ParamField>
+
+<ParamField path="output_var" type="string" default="RESULT">
+  Variable name to store result
+</ParamField>
+
+<ParamField path="capture" type="boolean" default="false">
+  Capture as user-visible variable
+</ParamField>
+
+### Example
+
+```json
+{
+  "block_type": "FileSystem",
+  "label": "Save Results",
+  "settings": {
+    "type": "FileSystem",
+    "op": "FileAppendLines",
+    "path": "./results/valid.txt",
+    "content": "<input.USER>:<input.PASS>"
+  }
+}
+```
+
+## RandomUserAgent
+
+Generate realistic user agent strings.
+
+### Settings
+
+<ParamField path="mode" type="UserAgentMode" default="Random">
+  Generation mode:
+  - `Random` - Generate from browser database
+  - `CustomList` - Pick from custom list
+</ParamField>
+
+<ParamField path="browser_filter" type="array" default="[Chrome, Firefox, Safari, Edge]">
+  Browser types to include in random generation
+</ParamField>
+
+<ParamField path="platform_filter" type="array" default="[Desktop, Mobile]">
+  Platform types to include
+</ParamField>
+
+<ParamField path="custom_list" type="string">
+  Custom user agent list (one per line)
+</ParamField>
+
+<ParamField path="output_var" type="string" default="USER_AGENT">
+  Variable name to store generated user agent
+</ParamField>
+
+<ParamField path="capture" type="boolean" default="false">
+  Capture as user-visible variable
+</ParamField>
+
+<ParamField path="match_tls" type="boolean" default="false">
+  Match TLS fingerprint to user agent (when using AzureTLS)
+</ParamField>
+
+### Example
+
+```json
+{
+  "block_type": "RandomUserAgent",
+  "label": "Generate UA",
+  "settings": {
+    "type": "RandomUserAgent",
+    "mode": "Random",
+    "browser_filter": ["Chrome", "Firefox"],
+    "platform_filter": ["Desktop"],
+    "output_var": "USER_AGENT"
+  }
+}
+```
+
+## RandomData
+
+Generate random test data.
+
+### Settings
+
+<ParamField path="data_type" type="RandomDataType" required>
+  Type of data to generate:
+  - `String` - Random string
+  - `Uuid` - UUID v4
+  - `Number` - Random number
+  - `Email` - Random email address
+  - `FirstName` - Random first name
+  - `LastName` - Random last name
+  - `FullName` - Random full name
+  - `StreetAddress` - Random address
+  - `City` - Random city
+  - `State` - Random state/province
+  - `ZipCode` - Random ZIP/postal code
+  - `PhoneNumber` - Random phone number
+  - `Date` - Random date
+</ParamField>
+
+<ParamField path="output_var" type="string" default="RANDOM">
+  Variable name to store generated value
+</ParamField>
+
+<ParamField path="capture" type="boolean" default="false">
+  Capture as user-visible variable
+</ParamField>
+
+<ParamField path="string_length" type="number" default="16">
+  String length (for String type)
+</ParamField>
+
+<ParamField path="string_charset" type="string" default="alphanumeric">
+  Character set: `alphanumeric`, `alpha`, `numeric`, `hex`, `custom`
+</ParamField>
+
+<ParamField path="custom_chars" type="string">
+  Custom character set (when charset is "custom")
+</ParamField>
+
+<ParamField path="number_min" type="number" default="0">
+  Minimum number (for Number type)
+</ParamField>
+
+<ParamField path="number_max" type="number" default="100">
+  Maximum number (for Number type)
+</ParamField>
+
+<ParamField path="number_decimal" type="boolean" default="false">
+  Generate decimal numbers
+</ParamField>
+
+<ParamField path="date_format" type="string" default="%Y-%m-%d">
+  Date format string (for Date type)
+</ParamField>
+
+<ParamField path="date_min" type="string">
+  Minimum date
+</ParamField>
+
+<ParamField path="date_max" type="string">
+  Maximum date
+</ParamField>
+
+### Examples
+
+```json
+{
+  "block_type": "RandomData",
+  "label": "Generate Email",
+  "settings": {
+    "type": "RandomData",
+    "data_type": "Email",
+    "output_var": "RANDOM_EMAIL",
+    "capture": true
+  }
+}
+```
+
+```json
+{
+  "block_type": "RandomData",
+  "label": "Random String",
+  "settings": {
+    "type": "RandomData",
+    "data_type": "String",
+    "string_length": 32,
+    "string_charset": "hex",
+    "output_var": "RANDOM_TOKEN"
+  }
+}
+```
+
+## Plugin
+
+Load and execute custom plugin blocks.
+
+### Settings
+
+<ParamField path="plugin_block_type" type="string" required>
+  Name of the plugin block type to execute
+</ParamField>
+
+<ParamField path="settings_json" type="string" default="{}">
+  JSON settings for the plugin (as string)
+</ParamField>
+
+<ParamField path="output_var" type="string" default="PLUGIN_RESULT">
+  Variable name to store plugin output
+</ParamField>
+
+<ParamField path="capture" type="boolean" default="false">
+  Capture as user-visible variable
+</ParamField>
+
+### Example
+
+```json
+{
+  "block_type": "Plugin",
+  "label": "Custom Plugin",
+  "settings": {
+    "type": "Plugin",
+    "plugin_block_type": "MyCustomBlock",
+    "settings_json": "{\"param1\":\"value1\"}",
+    "output_var": "PLUGIN_OUTPUT"
+  }
+}
+```
+
+## Constants
+
+Define constant values used throughout the pipeline.
+
+### Settings
+
+<ParamField path="constants" type="array" required>
+  Array of constant entries with `name` and `value`
+</ParamField>
+
+### Example
+
+```json
+{
+  "block_type": "Constants",
+  "label": "Define Constants",
+  "settings": {
+    "type": "Constants",
+    "constants": [
+      {"name": "API_URL", "value": "https://api.example.com"},
+      {"name": "API_VERSION", "value": "v2"}
+    ]
+  }
+}
+```
+
+## Dictionary
+
+Perform key-value storage operations.
+
+### Settings
+
+<ParamField path="operation" type="DictOp" required>
+  Dictionary operation:
+  - `Get` - Get value by key
+  - `Set` - Set key-value pair
+  - `Remove` - Remove key
+  - `Exists` - Check if key exists
+  - `Keys` - Get all keys
+  - `Values` - Get all values
+</ParamField>
+
+<ParamField path="dict_var" type="string" default="DICT">
+  Variable containing dictionary
+</ParamField>
+
+<ParamField path="key" type="string">
+  Dictionary key
+</ParamField>
+
+<ParamField path="value" type="string">
+  Value to set (for Set operation)
+</ParamField>
+
+<ParamField path="output_var" type="string" default="RESULT">
+  Variable name to store result
+</ParamField>
+
+<ParamField path="capture" type="boolean" default="false">
+  Capture as user-visible variable
+</ParamField>
+
+## GenerateGUID
+
+Generate UUID/GUID values.
+
+### Settings
+
+<ParamField path="guid_version" type="GUIDVersion" default="V4">
+  UUID version:
+  - `V1` - Time-based
+  - `V4` - Random
+  - `V5` - Name-based (SHA-1)
+</ParamField>
+
+<ParamField path="namespace" type="string">
+  Namespace UUID (for V5)
+</ParamField>
+
+<ParamField path="name" type="string">
+  Name string (for V5)
+</ParamField>
+
+<ParamField path="output_var" type="string" default="GUID">
+  Variable name to store UUID
+</ParamField>
+
+<ParamField path="capture" type="boolean" default="false">
+  Capture as user-visible variable
+</ParamField>
+
+### Example
+
+```json
+{
+  "block_type": "GenerateGUID",
+  "label": "Generate UUID",
+  "settings": {
+    "type": "GenerateGUID",
+    "guid_version": "V4",
+    "output_var": "REQUEST_ID"
+  }
+}
+```
+
+## PhoneCountry
+
+Extract country information from phone numbers.
+
+### Settings
+
+<ParamField path="input_var" type="string" required>
+  Variable containing phone number
+</ParamField>
+
+<ParamField path="output_var" type="string" default="COUNTRY">
+  Variable name to store result
+</ParamField>
+
+<ParamField path="output_format" type="PhoneOutputFormat" default="CountryCode">
+  Output format:
+  - `CountryCode` - Numeric code (e.g., "1")
+  - `CountryName` - Full name (e.g., "United States")
+  - `ISO2` - 2-letter code (e.g., "US")
+  - `ISO3` - 3-letter code (e.g., "USA")
+</ParamField>
+
+<ParamField path="capture" type="boolean" default="false">
+  Capture as user-visible variable
+</ParamField>
+
+### Example
+
+```json
+{
+  "block_type": "PhoneCountry",
+  "label": "Detect Country",
+  "settings": {
+    "type": "PhoneCountry",
+    "input_var": "input.PHONE",
+    "output_format": "ISO2",
+    "output_var": "COUNTRY_CODE",
+    "capture": true
+  }
+}
+```

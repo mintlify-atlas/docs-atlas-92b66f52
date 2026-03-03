@@ -1,0 +1,266 @@
+---
+title: Pipeline structure
+description: Core pipeline data structure and configuration
+---
+
+The `Pipeline` struct represents a complete automation config with blocks, data sources, proxy settings, and browser configuration.
+
+## Pipeline struct
+
+Defined in `src/pipeline/mod.rs:28-45`
+
+<ParamField path="id" type="Uuid" required>
+  Unique identifier for the pipeline
+</ParamField>
+
+<ParamField path="name" type="string" required>
+  Human-readable config name
+</ParamField>
+
+<ParamField path="author" type="string">
+  Author name or identifier
+</ParamField>
+
+<ParamField path="created" type="DateTime<Utc>" required>
+  Timestamp when the pipeline was created (ISO 8601)
+</ParamField>
+
+<ParamField path="modified" type="DateTime<Utc>" required>
+  Timestamp of last modification (ISO 8601)
+</ParamField>
+
+<ParamField path="blocks" type="Vec<Block>" required>
+  Main execution blocks run for each data line
+</ParamField>
+
+<ParamField path="startup_blocks" type="Vec<Block>">
+  Blocks run once at job start (before processing data)
+</ParamField>
+
+<ParamField path="data_settings" type="DataSettings" required>
+  Wordlist format and parsing configuration
+</ParamField>
+
+<ParamField path="proxy_settings" type="ProxySettings" required>
+  Proxy rotation and ban detection settings
+</ParamField>
+
+<ParamField path="browser_settings" type="BrowserSettings" required>
+  Browser and TLS fingerprinting configuration
+</ParamField>
+
+<ParamField path="runner_settings" type="RunnerSettings">
+  Job execution parameters (max CPM, timeout, retries)
+</ParamField>
+
+<ParamField path="output_settings" type="OutputSettings">
+  Result output configuration
+</ParamField>
+
+## DataSettings
+
+Defines how to parse input data (wordlist).
+
+<ParamField path="wordlist_type" type="string" required>
+  Preset format name: `"Credentials"`, `"Url"`, `"Custom"`, etc.
+</ParamField>
+
+<ParamField path="separator" type="char" required>
+  Character to split each line on (typically `:` for credentials)
+  
+  **Default:** `':'`
+</ParamField>
+
+<ParamField path="slices" type="Vec<string>" required>
+  Ordered variable names for split parts
+  
+  **Example:** `["USER", "PASS"]` for credentials
+</ParamField>
+
+## ProxySettings
+
+Proxy rotation and health checking configuration.
+
+<ParamField path="proxy_mode" type="ProxyMode" required>
+  Rotation mode: `None`, `Rotate`, `Sticky`, `CpmLimited`
+</ParamField>
+
+<ParamField path="proxy_sources" type="Vec<ProxySource>" required>
+  Proxy sources (file, URL, inline list)
+</ParamField>
+
+<ParamField path="ban_duration_secs" type="u64" required>
+  How long to ban a proxy after detection (seconds)
+  
+  **Default:** `300`
+</ParamField>
+
+<ParamField path="max_retries_before_ban" type="u32" required>
+  Failed attempts before banning a proxy
+  
+  **Default:** `3`
+</ParamField>
+
+<ParamField path="cpm_per_proxy" type="u32">
+  Max checks per minute per proxy (for `CpmLimited` mode)
+</ParamField>
+
+<ParamField path="proxy_groups" type="Vec<ProxyGroup>">
+  Named proxy groups for different pools
+</ParamField>
+
+<ParamField path="active_group" type="string">
+  Active proxy group name (empty = use default sources)
+</ParamField>
+
+## BrowserSettings
+
+Browser and TLS emulation configuration.
+
+<ParamField path="browser" type="string" required>
+  Browser type: `"chrome"`, `"firefox"`, `"edge"`
+  
+  **Default:** `"chrome"`
+</ParamField>
+
+<ParamField path="ja3" type="string?">
+  JA3 TLS fingerprint override (hex string)
+</ParamField>
+
+<ParamField path="http2_fingerprint" type="string?">
+  HTTP/2 SETTINGS frame fingerprint
+</ParamField>
+
+<ParamField path="user_agent" type="string?">
+  Custom User-Agent override
+</ParamField>
+
+## RunnerSettings
+
+Job execution limits and timeout configuration.
+
+<ParamField path="max_cpm" type="u32">
+  Maximum checks per minute (0 = unlimited)
+  
+  **Default:** `0`
+</ParamField>
+
+<ParamField path="timeout_ms" type="u64">
+  Per-credential execution timeout (milliseconds)
+  
+  **Default:** `60000`
+</ParamField>
+
+<ParamField path="max_retries" type="u32">
+  Max retry attempts for failed credentials
+  
+  **Default:** `0`
+</ParamField>
+
+## OutputSettings
+
+Result output configuration.
+
+<ParamField path="save_hits" type="bool">
+  Whether to save successful hits to disk
+  
+  **Default:** `true`
+</ParamField>
+
+<ParamField path="save_fails" type="bool">
+  Whether to save failed attempts
+  
+  **Default:** `false`
+</ParamField>
+
+<ParamField path="output_format" type="string">
+  Output file format: `"txt"`, `"json"`, `"csv"`
+  
+  **Default:** `"txt"`
+</ParamField>
+
+## Example pipeline
+
+From `configs/example.rfx`:
+
+```json
+{
+  "id": "00000000-0000-0000-0000-000000000001",
+  "name": "Example Login Config",
+  "author": "reqflow",
+  "created": "2026-02-15T00:00:00Z",
+  "modified": "2026-02-15T00:00:00Z",
+  "blocks": [
+    {
+      "id": "10000000-0000-0000-0000-000000000001",
+      "block_type": "HttpRequest",
+      "label": "Login Request",
+      "disabled": false,
+      "safe_mode": false,
+      "settings": {
+        "type": "HttpRequest",
+        "method": "POST",
+        "url": "https://httpbin.org/post",
+        "headers": [
+          ["Content-Type", "application/json"]
+        ],
+        "body": "{\"email\":\"<input.USER>\",\"password\":\"<input.PASS>\"}"
+      }
+    }
+  ],
+  "startup_blocks": [],
+  "data_settings": {
+    "wordlist_type": "Credentials",
+    "separator": ":",
+    "slices": ["USER", "PASS"]
+  },
+  "proxy_settings": {
+    "proxy_mode": "None",
+    "proxy_sources": [],
+    "ban_duration_secs": 300,
+    "max_retries_before_ban": 3
+  },
+  "browser_settings": {
+    "browser": "chrome",
+    "ja3": null,
+    "http2_fingerprint": null,
+    "user_agent": null
+  }
+}
+```
+
+## Default values
+
+From `src/pipeline/mod.rs:47-64`:
+
+```rust
+impl Default for Pipeline {
+    fn default() -> Self {
+        Self {
+            id: Uuid::new_v4(),
+            name: "New Config".into(),
+            author: String::new(),
+            created: Utc::now(),
+            modified: Utc::now(),
+            blocks: Vec::new(),
+            startup_blocks: Vec::new(),
+            data_settings: DataSettings::default(),
+            proxy_settings: ProxySettings::default(),
+            browser_settings: BrowserSettings::default(),
+            runner_settings: RunnerSettings::default(),
+            output_settings: OutputSettings::default(),
+        }
+    }
+}
+```
+
+## See also
+
+<CardGroup cols={2}>
+  <Card title="Block settings" icon="cube" href="/api/block-settings">
+    Detailed settings for each block type
+  </Card>
+  <Card title="Config format" icon="file" href="/api/config-format">
+    .rfx file format specification
+  </Card>
+</CardGroup>

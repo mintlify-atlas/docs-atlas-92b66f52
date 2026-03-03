@@ -1,0 +1,494 @@
+---
+title: 'Writing Plugins'
+description: 'Create custom Rust plugins with FFI interface and hot-loading support'
+---
+
+Plugins let you extend IronBullet with custom blocks written in Rust. Plugins are compiled as dynamic libraries (.dll/.so) and loaded at runtime without recompiling IronBullet.
+
+## Plugin System Overview
+
+**How it works:**
+1. You write a Rust library with exported FFI functions
+2. Compile to a `.dll` (Windows) or `.so` (Linux)
+3. Drop it in the `plugins/` directory
+4. IronBullet loads it and registers your custom blocks
+5. Blocks appear in the palette under "Plugins" category
+
+**Use cases:**
+- Custom crypto/hashing algorithms
+- Integration with external APIs
+- Performance-critical operations
+- Proprietary logic you don't want to share
+
+<Steps>
+  <Step title="Set Up Plugin Project">
+    Create a new Rust library:
+
+    ```bash
+    cargo new --lib example-plugin
+    cd example-plugin
+    ```
+
+    Edit `Cargo.toml`:
+
+    ```toml
+    [package]
+    name = "example-plugin"
+    version = "0.1.0"
+    edition = "2021"
+
+    [lib]
+    crate-type = ["cdylib"]
+
+    [dependencies]
+    serde = { version = "1.0", features = ["derive"] }
+    serde_json = "1.0"
+    ```
+
+    The `cdylib` type tells Rust to build a C-compatible dynamic library.
+  </Step>
+
+  <Step title="Define the ABI Structures">
+    Copy the ABI definitions from `plugins/example-plugin/src/lib.rs`:
+
+    ```rust
+    use std::ffi::{c_char, CStr, CString};
+
+    #[repr(C)]
+    pub struct PluginInfo {
+        pub name: *const c_char,
+        pub version: *const c_char,
+        pub author: *const c_char,
+        pub description: *const c_char,
+        pub block_count: u32,
+    }
+
+    #[repr(C)]
+    pub struct BlockInfo {
+        pub block_type_name: *const c_char,
+        pub label: *const c_char,
+        pub category: *const c_char,
+        pub color: *const c_char,
+        pub icon: *const c_char,
+        pub settings_schema_json: *const c_char,
+        pub default_settings_json: *const c_char,
+    }
+
+    #[repr(C)]
+    pub struct ExecuteResult {
+        pub success: bool,
+        pub updated_variables_json: *const c_char,
+        pub log_message: *const c_char,
+        pub error_message: *const c_char,
+    }
+    ```
+
+    These structures **must match** the Rust definitions in `src/plugin/abi.rs` exactly.
+  </Step>
+
+  <Step title="Implement Plugin Metadata">
+    Expose plugin information:
+
+    ```rust
+    use std::sync::OnceLock;
+
+    fn leak_cstring(s: &str) -> *const c_char {
+        CString::new(s).unwrap().into_raw() as *const c_char
+    }
+
+    static PLUGIN_INFO: OnceLock<PluginInfo> = OnceLock::new();
+
+    fn get_plugin_info() -> &'static PluginInfo {
+        PLUGIN_INFO.get_or_init(|| PluginInfo {
+            name: leak_cstring("ExamplePlugin"),
+            version: leak_cstring("0.1.0"),
+            author: leak_cstring("YourName"),
+            description: leak_cstring("Does something cool"),
+            block_count: 1,
+        })
+    }
+
+    #[no_mangle]
+    pub extern "C" fn plugin_info() -> *const PluginInfo {
+        get_plugin_info() as *const PluginInfo
+    }
+    ```
+
+    **Important:**
+    - `#[no_mangle]` prevents Rust from mangling the function name
+    - `extern "C"` uses C calling convention
+    - `leak_cstring()` creates stable pointers (never freed)
+  </Step>
+
+  <Step title="Define Your Custom Block">
+    Describe the block's settings schema:
+
+    ```rust
+    static BLOCK_INFO: OnceLock<BlockInfo> = OnceLock::new();
+
+    fn get_block_info() -> &'static BlockInfo {
+        BLOCK_INFO.get_or_init(|| BlockInfo {
+            block_type_name: leak_cstring("ExamplePlugin.ReverseString"),
+            label: leak_cstring("Reverse String"),
+            category: leak_cstring("Utilities"),
+            color: leak_cstring("#9b59b6"),
+            icon: leak_cstring("repeat"),
+            settings_schema_json: leak_cstring(r#"{
+                "type": "object",
+                "properties": {
+                    "input_var": {
+                        "type": "string",
+                        "title": "Input Variable",
+                        "default": "data.SOURCE"
+                    },
+                    "output_var": {
+                        "type": "string",
+                        "title": "Output Variable",
+                        "default": "REVERSED"
+                    }
+                }
+            }"#),
+            default_settings_json: leak_cstring(r#"{
+                "input_var": "data.SOURCE",
+                "output_var": "REVERSED"
+            }"#),
+        })
+    }
+
+    #[no_mangle]
+    pub extern "C" fn plugin_block_info(index: u32) -> *const BlockInfo {
+        if index == 0 {
+            get_block_info() as *const BlockInfo
+        } else {
+            std::ptr::null()
+        }
+    }
+    ```
+
+    **Settings schema** is JSON Schema format. IronBullet uses this to auto-generate the UI.
+  </Step>
+
+  <Step title="Implement Block Execution">
+    Write the core logic:
+
+    ```rust
+    use std::collections::HashMap;
+
+    #[no_mangle]
+    pub extern "C" fn plugin_execute(
+        _block_index: u32,
+        settings_json: *const c_char,
+        variables_json: *const c_char,
+    ) -> *const ExecuteResult {
+        // Parse settings
+        let settings_str = unsafe {
+            CStr::from_ptr(settings_json).to_string_lossy().to_string()
+        };
+        let settings: HashMap<String, String> =
+            serde_json::from_str(&settings_str).unwrap_or_default();
+
+        let input_var = settings
+            .get("input_var")
+            .cloned()
+            .unwrap_or_else(|| "data.SOURCE".to_string());
+        let output_var = settings
+            .get("output_var")
+            .cloned()
+            .unwrap_or_else(|| "REVERSED".to_string());
+
+        // Parse variables
+        let vars_str = unsafe {
+            CStr::from_ptr(variables_json).to_string_lossy().to_string()
+        };
+        let mut vars: HashMap<String, String> =
+            serde_json::from_str(&vars_str).unwrap_or_default();
+
+        // Get input value
+        let input_value = vars.get(&input_var).cloned().unwrap_or_default();
+
+        // DO THE THING
+        let reversed: String = input_value.chars().rev().collect();
+
+        // Update variables
+        vars.insert(output_var.clone(), reversed.clone());
+
+        // Return result
+        let updated_json = serde_json::to_string(&vars).unwrap();
+        let log_msg = format!("Reversed '{}' → '{}'", input_value, reversed);
+
+        let result = Box::new(ExecuteResult {
+            success: true,
+            updated_variables_json: CString::new(updated_json).unwrap().into_raw(),
+            log_message: CString::new(log_msg).unwrap().into_raw(),
+            error_message: std::ptr::null(),
+        });
+
+        Box::into_raw(result) as *const ExecuteResult
+    }
+    ```
+
+    **Flow:**
+    1. Deserialize settings (JSON → HashMap)
+    2. Deserialize variables (JSON → HashMap)
+    3. Read input variable
+    4. Process (reverse string)
+    5. Update variables HashMap
+    6. Serialize back to JSON
+    7. Return ExecuteResult with success/log/error
+  </Step>
+
+  <Step title="Add Memory Cleanup">
+    Prevent memory leaks:
+
+    ```rust
+    #[no_mangle]
+    pub extern "C" fn plugin_free_string(ptr: *const c_char) {
+        if !ptr.is_null() {
+            unsafe {
+                drop(CString::from_raw(ptr as *mut c_char));
+            }
+        }
+    }
+    ```
+
+    IronBullet calls this to free strings allocated by the plugin.
+  </Step>
+
+  <Step title="Build the Plugin">
+    Compile the dynamic library:
+
+    ```bash
+    cargo build --release
+    ```
+
+    Output location:
+    - Windows: `target/release/example_plugin.dll`
+    - Linux: `target/release/libexample_plugin.so`
+    - macOS: `target/release/libexample_plugin.dylib`
+  </Step>
+
+  <Step title="Install the Plugin">
+    Copy the library to IronBullet's plugin directory:
+
+    ```bash
+    # Windows
+    copy target\release\example_plugin.dll C:\IronBullet\plugins\
+
+    # Linux
+    cp target/release/libexample_plugin.so ~/ironbullet/plugins/
+    ```
+
+    Create the `plugins/` directory if it doesn't exist.
+  </Step>
+
+  <Step title="Test the Plugin">
+    Restart IronBullet. You should see:
+
+    ```
+    [*] Loaded plugin: ExamplePlugin v0.1.0
+    [*] Registered block: ExamplePlugin.ReverseString
+    ```
+
+    Check the **Plugins** category in the block palette. Your custom block appears there.
+
+    Drag it to the canvas and configure:
+    ```
+    Input Variable: data.SOURCE
+    Output Variable: REVERSED
+    ```
+
+    Press F5 to test:
+    ```
+    Input data: hello world
+    ```
+
+    Check variables after execution:
+    ```
+    REVERSED = "dlrow olleh"
+    ```
+  </Step>
+</Steps>
+
+## Hot Reloading
+
+Plugins support **hot reloading**:
+
+1. Keep IronBullet running
+2. Rebuild your plugin: `cargo build --release`
+3. Click **Reload Plugins** in the toolbar
+4. Updated plugin is reloaded without restarting IronBullet
+
+<Warning>
+  On Windows, you may need to close configs using the plugin before reloading. DLLs can't be unloaded while in use.
+</Warning>
+
+## Advanced Example: Cloudflare Clearance
+
+The included `cf-clearance` plugin demonstrates a real-world use case:
+
+**File:** `plugins/cf-clearance/src/lib.rs`
+
+```rust
+#[no_mangle]
+pub extern "C" fn plugin_execute(...) -> *const ExecuteResult {
+    // 1. Launch headless browser
+    // 2. Navigate to Cloudflare challenge page
+    // 3. Wait for challenge to solve
+    // 4. Extract cf_clearance cookie
+    // 5. Return cookie in variables
+}
+```
+
+Usage in IronBullet:
+```yaml
+1. Plugin (cf-clearance)
+   URL: https://protected-site.com
+   Output Variable: CF_COOKIE
+
+2. HttpRequest
+   URL: https://protected-site.com/api/login
+   Headers:
+     Cookie: <CF_COOKIE>
+```
+
+## Plugin Security
+
+<Warning>
+  Plugins run with **full system access**. Only load plugins from trusted sources.
+</Warning>
+
+Plugins can:
+- Read/write files
+- Make network requests
+- Execute system commands
+- Access environment variables
+
+**Best practices:**
+1. Review plugin source code before compiling
+2. Use sandboxing (Docker, VMs) when testing untrusted plugins
+3. Don't distribute plugins with hardcoded credentials
+4. Sign your plugins with code signing certificates (Windows)
+
+## Debugging Plugins
+
+**Enable verbose logging:**
+```bash
+ironbullet --debug
+```
+
+**Check for load errors:**
+```
+[error] Failed to load plugin: example_plugin.dll
+  Reason: The specified module could not be found
+```
+
+Common causes:
+- Missing dependencies (MSVC runtime on Windows)
+- Wrong platform (32-bit vs 64-bit)
+- Incompatible Rust versions
+
+**Use print debugging:**
+```rust
+eprintln!("[plugin] Processing: {}", input_value);
+```
+
+Output appears in IronBullet's console (if launched from terminal).
+
+## Multi-Block Plugins
+
+Plugins can register multiple blocks:
+
+```rust
+PluginInfo {
+    block_count: 3,  // Changed from 1
+    ...
+}
+
+#[no_mangle]
+pub extern "C" fn plugin_block_info(index: u32) -> *const BlockInfo {
+    match index {
+        0 => &BLOCK_1_INFO as *const BlockInfo,
+        1 => &BLOCK_2_INFO as *const BlockInfo,
+        2 => &BLOCK_3_INFO as *const BlockInfo,
+        _ => std::ptr::null(),
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn plugin_execute(
+    block_index: u32,  // Use this to route to the right handler
+    settings_json: *const c_char,
+    variables_json: *const c_char,
+) -> *const ExecuteResult {
+    match block_index {
+        0 => execute_block_1(settings_json, variables_json),
+        1 => execute_block_2(settings_json, variables_json),
+        2 => execute_block_3(settings_json, variables_json),
+        _ => panic!("Invalid block index"),
+    }
+}
+```
+
+## Tips
+
+<Tip>
+  Use `OnceLock` for static data. It's thread-safe and lazily initialized.
+</Tip>
+
+<Note>
+  The `settings_schema_json` uses JSON Schema format. See [json-schema.org](https://json-schema.org) for full spec.
+</Note>
+
+<Warning>
+  Never `panic!()` in FFI functions. It crashes IronBullet. Use `Result` and return errors via `ExecuteResult::error_message`.
+</Warning>
+
+## Example Use Cases
+
+**Custom Crypto:**
+```rust
+// Block: HMAC-SHA512
+pub extern "C" fn plugin_execute(...) {
+    let key = vars.get("KEY").unwrap();
+    let message = vars.get("MESSAGE").unwrap();
+    let hmac = hmac_sha512(key, message);
+    vars.insert("HMAC".into(), hex::encode(hmac));
+}
+```
+
+**External API:**
+```rust
+// Block: Discord Webhook
+pub extern "C" fn plugin_execute(...) {
+    let webhook_url = settings.get("webhook_url").unwrap();
+    let message = vars.get("MESSAGE").unwrap();
+    reqwest::blocking::Client::new()
+        .post(webhook_url)
+        .json(&json!({ "content": message }))
+        .send()?;
+}
+```
+
+**License Validation:**
+```rust
+// Block: Check License Key
+pub extern "C" fn plugin_execute(...) {
+    let key = vars.get("LICENSE_KEY").unwrap();
+    let valid = verify_license(key);  // Your proprietary logic
+    if !valid {
+        return error_result("Invalid license");
+    }
+    success_result()
+}
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="First Pipeline" icon="rocket" href="/guides/first-pipeline">
+    Use plugins in a complete workflow
+  </Card>
+  <Card title="Browser Automation" icon="browser" href="/guides/browser-automation">
+    Combine plugins with browser blocks
+  </Card>
+</CardGroup>

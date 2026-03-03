@@ -1,122 +1,120 @@
 {
   "$schema": "https://mintlify.com/docs.json",
-  "theme": "mint",
-  "name": "Mint Starter Kit",
+  "name": "IronBullet",
+  "theme": "aspen",
   "colors": {
-    "primary": "#16A34A",
-    "light": "#07C983",
-    "dark": "#15803D"
+    "primary": "#4A5568",
+    "light": "#718096",
+    "dark": "#2D3748"
   },
-  "favicon": "/favicon.svg",
+  "navbar": {
+    "primary": {
+      "type": "github",
+      "href": "https://github.com/ZeraTS/ironbullet"
+    }
+  },
+  "footer": {
+    "socials": {
+      "github": "https://github.com/ZeraTS/ironbullet"
+    }
+  },
   "navigation": {
     "tabs": [
       {
-        "tab": "Guides",
+        "tab": "Documentation",
         "groups": [
           {
-            "group": "Getting started",
+            "group": "Getting Started",
             "pages": [
-              "index",
-              "quickstart",
-              "development"
+              "introduction",
+              "installation",
+              "quickstart"
             ]
           },
           {
-            "group": "Customization",
+            "group": "Core Concepts",
             "pages": [
-              "essentials/settings",
-              "essentials/navigation"
+              "concepts/pipelines",
+              "concepts/blocks",
+              "concepts/variables",
+              "concepts/data-input",
+              "concepts/proxy-rotation"
             ]
           },
           {
-            "group": "Writing content",
+            "group": "Block Reference",
             "pages": [
-              "essentials/markdown",
-              "essentials/code",
-              "essentials/images",
-              "essentials/reusable-snippets"
+              "blocks/overview",
+              "blocks/http",
+              "blocks/parsing",
+              "blocks/functions",
+              "blocks/control-flow",
+              "blocks/browser",
+              "blocks/protocols",
+              "blocks/bypass",
+              "blocks/utilities"
             ]
           },
           {
-            "group": "AI tools",
+            "group": "Features",
             "pages": [
-              "ai-tools/cursor",
-              "ai-tools/claude-code",
-              "ai-tools/windsurf"
+              "features/pipeline-editor",
+              "features/debug-mode",
+              "features/jobs",
+              "features/export-code",
+              "features/cli-mode",
+              "features/plugin-system"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/first-pipeline",
+              "guides/credential-checking",
+              "guides/importing-configs",
+              "guides/working-with-proxies",
+              "guides/browser-automation",
+              "guides/writing-plugins"
+            ]
+          },
+          {
+            "group": "Advanced",
+            "pages": [
+              "advanced/performance-tuning",
+              "advanced/custom-blocks",
+              "advanced/rust-codegen",
+              "advanced/troubleshooting"
             ]
           }
         ]
       },
       {
-        "tab": "API reference",
+        "tab": "API Reference",
         "groups": [
           {
-            "group": "API documentation",
+            "group": "Pipeline API",
             "pages": [
-              "api-reference/introduction"
+              "api/pipeline",
+              "api/block-settings",
+              "api/config-format"
             ]
           },
           {
-            "group": "Endpoint examples",
+            "group": "CLI Reference",
             "pages": [
-              "api-reference/endpoint/get",
-              "api-reference/endpoint/create",
-              "api-reference/endpoint/delete",
-              "api-reference/endpoint/webhook"
+              "api/cli-commands",
+              "api/cli-options"
+            ]
+          },
+          {
+            "group": "Plugin API",
+            "pages": [
+              "api/plugin-interface",
+              "api/plugin-examples"
             ]
           }
         ]
       }
-    ],
-    "global": {
-      "anchors": [
-        {
-          "anchor": "Documentation",
-          "href": "https://mintlify.com/docs",
-          "icon": "book-open-cover"
-        },
-        {
-          "anchor": "Blog",
-          "href": "https://mintlify.com/blog",
-          "icon": "newspaper"
-        }
-      ]
-    }
-  },
-  "logo": {
-    "light": "/logo/light.svg",
-    "dark": "/logo/dark.svg"
-  },
-  "navbar": {
-    "links": [
-      {
-        "label": "Support",
-        "href": "mailto:hi@mintlify.com"
-      }
-    ],
-    "primary": {
-      "type": "button",
-      "label": "Dashboard",
-      "href": "https://dashboard.mintlify.com"
-    }
-  },
-  "contextual": {
-    "options": [
-     "copy",
-     "view",
-     "chatgpt",
-     "claude",
-     "perplexity",
-     "mcp",
-     "cursor",
-     "vscode"
-   ]
-  },
-  "footer": {
-    "socials": {
-      "x": "https://x.com/mintlify",
-      "github": "https://github.com/mintlify",
-      "linkedin": "https://linkedin.com/company/mintlify"
-    }
+    ]
   }
 }

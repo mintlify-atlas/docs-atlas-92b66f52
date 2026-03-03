@@ -1,0 +1,281 @@
+---
+title: 'Plugin Interface'
+description: 'FFI interface, lifecycle, and hot-loading for IronBullet plugins'
+---
+
+## Overview
+
+IronBullet's plugin system uses a C-compatible FFI interface to load custom blocks from dynamic libraries (.dll files). Plugins can be written in any language that can produce C-compatible exports, though the included examples use Rust.
+
+## FFI Interface
+
+Plugins must implement four exported functions that match the C ABI defined in `src/plugin/abi.rs`:
+
+### Required Exports
+
+```rust
+// Returns plugin metadata
+plugin_info() -> *const PluginInfo
+
+// Returns metadata for a specific block by index
+plugin_block_info(index: u32) -> *const BlockInfo
+
+// Executes a block with given settings and variables
+plugin_execute(
+    block_index: u32,
+    settings_json: *const c_char,
+    variables_json: *const c_char
+) -> *const ExecuteResult
+
+// Frees strings allocated by the plugin
+plugin_free_string(ptr: *const c_char)
+```
+
+### ABI Structures
+
+#### PluginInfo
+
+Defines plugin metadata:
+
+```rust
+#[repr(C)]
+pub struct PluginInfo {
+    pub name: *const c_char,
+    pub version: *const c_char,
+    pub author: *const c_char,
+    pub description: *const c_char,
+    pub block_count: u32,
+}
+```
+
+**Fields:**
+- `name` - Plugin identifier (e.g., "ExamplePlugin")
+- `version` - Semantic version string (e.g., "0.1.0")
+- `author` - Author name
+- `description` - Human-readable description
+- `block_count` - Number of blocks this plugin provides
+
+#### BlockInfo
+
+Defines block metadata for UI and execution:
+
+```rust
+#[repr(C)]
+pub struct BlockInfo {
+    pub block_type_name: *const c_char,   // "PluginName.BlockName"
+    pub label: *const c_char,             // Display name
+    pub category: *const c_char,          // Block category
+    pub color: *const c_char,             // Hex color code
+    pub icon: *const c_char,              // Icon identifier
+    pub settings_schema_json: *const c_char,
+    pub default_settings_json: *const c_char,
+}
+```
+
+**Fields:**
+- `block_type_name` - Unique identifier in format "PluginName.BlockName"
+- `label` - Display name shown in UI
+- `category` - Category for block grouping (e.g., "Utilities", "Bypass")
+- `color` - Hex color code for visual identification (e.g., "#9b59b6")
+- `icon` - Icon identifier from icon set
+- `settings_schema_json` - JSON schema defining configurable settings
+- `default_settings_json` - JSON object with default setting values
+
+#### ExecuteResult
+
+Returned by `plugin_execute` to communicate execution results:
+
+```rust
+#[repr(C)]
+pub struct ExecuteResult {
+    pub success: bool,
+    pub updated_variables_json: *const c_char,
+    pub log_message: *const c_char,
+    pub error_message: *const c_char,
+}
+```
+
+**Fields:**
+- `success` - Whether execution completed successfully
+- `updated_variables_json` - JSON object with modified/new variables
+- `log_message` - Human-readable log message
+- `error_message` - Error description (only if `success` is false)
+
+## Plugin Lifecycle
+
+### 1. Loading
+
+The `PluginManager` scans a directory for `.dll` files and loads each plugin:
+
+```rust
+pub fn scan_directory(&mut self, path: &str) {
+    // Scans for .dll files and calls load_plugin() for each
+}
+```
+
+For each plugin:
+
+1. Load the dynamic library using `libloading`
+2. Call `plugin_info()` to get metadata
+3. Call `plugin_block_info(i)` for each block (0 to `block_count - 1`)
+4. Store metadata and library handle
+
+See `src/plugin/manager.rs:74-131` for the complete loading implementation.
+
+### 2. Execution
+
+When a plugin block is executed:
+
+1. Find the plugin and block by `block_type_name`
+2. Serialize settings and variables to JSON
+3. Call `plugin_execute()` with JSON strings
+4. Parse the `ExecuteResult`
+5. Free allocated strings using `plugin_free_string()`
+6. Return updated variables and log message
+
+See `src/plugin/manager.rs:141-206` for the execution implementation.
+
+### 3. Memory Management
+
+**Critical:** Plugins allocate strings that must be freed by the caller:
+
+```rust
+// Manager calls plugin_free_string() for each allocated string
+free_fn(result.updated_variables_json);
+free_fn(result.log_message);
+free_fn(result.error_message);
+```
+
+Plugins typically implement `plugin_free_string` as:
+
+```rust
+#[no_mangle]
+pub extern "C" fn plugin_free_string(ptr: *const c_char) {
+    if !ptr.is_null() {
+        unsafe {
+            drop(CString::from_raw(ptr as *mut c_char));
+        }
+    }
+}
+```
+
+## Hot-Loading
+
+Plugins can be reloaded by calling `scan_directory()` again:
+
+```rust
+let mut manager = PluginManager::new();
+manager.scan_directory("./plugins");
+
+// Later, to reload:
+manager.scan_directory("./plugins"); // Clears and reloads all plugins
+```
+
+**Note:** The current implementation clears all plugins before rescanning. The old library handles are dropped, allowing the OS to unload the DLLs if possible.
+
+## Querying Plugins
+
+### Get All Plugin Metadata
+
+```rust
+let plugins: Vec<PluginMeta> = manager.all_plugin_metas();
+```
+
+Returns:
+```rust
+pub struct PluginMeta {
+    pub name: String,
+    pub version: String,
+    pub author: String,
+    pub description: String,
+    pub dll_path: String,
+}
+```
+
+### Get All Block Metadata
+
+```rust
+let blocks: Vec<PluginBlockMeta> = manager.all_block_infos();
+```
+
+Returns:
+```rust
+pub struct PluginBlockMeta {
+    pub block_type_name: String,
+    pub label: String,
+    pub category: String,
+    pub color: String,
+    pub icon: String,
+    pub settings_schema_json: String,
+    pub default_settings_json: String,
+    pub plugin_name: String,
+    pub block_index: u32,
+}
+```
+
+## Executing Blocks
+
+```rust
+let result = manager.execute_block(
+    "ExamplePlugin.ReverseString",  // block_type_name
+    r#"{"input_var":"data.SOURCE"}"#,  // settings JSON
+    r#"{"data.SOURCE":"hello"}"#      // variables JSON
+)?;
+
+// Returns: (success, updated_vars, log_message)
+let (success, vars, log) = result;
+assert_eq!(vars.get("PLUGIN_RESULT"), Some(&"olleh".to_string()));
+```
+
+## Thread Safety
+
+`PluginManager` is marked as `Send + Sync`:
+
+```rust
+unsafe impl Send for PluginManager {}
+unsafe impl Sync for PluginManager {}
+```
+
+**Safety considerations:**
+- The manager can be shared across threads
+- Plugins must be thread-safe if called concurrently
+- Hot-reloading requires exclusive access (mutable reference)
+
+## Error Handling
+
+Plugins return errors via the `ExecuteResult` structure:
+
+```rust
+if !result.success {
+    let error = cstr_to_string(result.error_message);
+    // Free strings before returning error
+    free_fn(result.updated_variables_json);
+    free_fn(result.log_message);
+    free_fn(result.error_message);
+    return Err(error);
+}
+```
+
+Loading errors are logged to stderr:
+
+```rust
+if let Err(e) = self.load_plugin(&p) {
+    eprintln!("Failed to load plugin {:?}: {}", p, e);
+}
+```
+
+## Cargo Configuration
+
+Plugins must be compiled as dynamic libraries. In `Cargo.toml`:
+
+```toml
+[lib]
+crate-type = ["cdylib"]
+```
+
+This produces:
+- `plugin.dll` on Windows
+- `libplugin.so` on Linux
+- `libplugin.dylib` on macOS
+
+The plugin manager currently only scans for `.dll` files (see `manager.rs:65`).

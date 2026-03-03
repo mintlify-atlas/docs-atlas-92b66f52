@@ -1,0 +1,408 @@
+---
+title: 'Parsing Blocks'
+description: 'Extract data from responses using JSON, Regex, CSS, XPath, and more'
+---
+
+## Overview
+
+Parsing blocks extract structured data from HTTP responses, HTML pages, and other text sources. IronBullet provides multiple parsing methods:
+
+- **ParseJSON**: Extract data using JSONPath
+- **ParseRegex**: Pattern matching with regular expressions
+- **ParseLR**: Left-right string extraction
+- **ParseCSS**: CSS selector queries for HTML
+- **ParseXPath**: XPath queries for XML/HTML
+- **ParseCookie**: Extract specific cookies
+- **LambdaParser**: Custom JavaScript expressions
+- **Parse**: Unified parser with all modes
+
+## ParseJSON
+
+Extract data from JSON responses using JSONPath syntax.
+
+### Settings
+
+<ParamField path="input_var" type="string" default="data.SOURCE">
+  Variable containing JSON to parse
+</ParamField>
+
+<ParamField path="json_path" type="string" required>
+  JSONPath expression
+  
+  Examples:
+  - `json.token` - Extract top-level token field
+  - `data.users[0].email` - First user's email
+  - `response.items[*].id` - All item IDs
+</ParamField>
+
+<ParamField path="output_var" type="string" default="PARSED">
+  Variable name to store extracted value
+</ParamField>
+
+<ParamField path="capture" type="boolean" default="false">
+  Capture as user-visible variable
+</ParamField>
+
+### Example
+
+```json
+{
+  "block_type": "ParseJSON",
+  "label": "Extract Auth Token",
+  "settings": {
+    "type": "ParseJSON",
+    "json_path": "json.auth.token",
+    "output_var": "AUTH_TOKEN",
+    "capture": true
+  }
+}
+```
+
+Given response:
+```json
+{"auth": {"token": "abc123", "expires": 3600}}
+```
+
+Result: `data.AUTH_TOKEN = "abc123"`
+
+## ParseRegex
+
+Extract data using regular expressions with capture groups.
+
+### Settings
+
+<ParamField path="input_var" type="string" default="data.SOURCE">
+  Variable containing text to parse
+</ParamField>
+
+<ParamField path="pattern" type="string" required>
+  Regular expression pattern
+  
+  Use capture groups `()` to extract specific parts
+</ParamField>
+
+<ParamField path="output_format" type="string" default="$1">
+  Output format using capture group references
+  
+  Examples:
+  - `$1` - First capture group
+  - `$1:$2` - Combine multiple groups
+  - `User: $1, ID: $2` - Custom formatting
+</ParamField>
+
+<ParamField path="output_var" type="string" default="PARSED">
+  Variable name to store result
+</ParamField>
+
+<ParamField path="capture" type="boolean" default="false">
+  Capture as user-visible variable
+</ParamField>
+
+<ParamField path="multi_line" type="boolean" default="false">
+  Enable multi-line mode (^ and $ match line boundaries)
+</ParamField>
+
+### Example
+
+```json
+{
+  "block_type": "ParseRegex",
+  "label": "Extract Email",
+  "settings": {
+    "type": "ParseRegex",
+    "pattern": "email[\"']?:\\s*[\"']([^\"']+)",
+    "output_format": "$1",
+    "output_var": "EMAIL",
+    "capture": true
+  }
+}
+```
+
+Given text:
+```
+{"user": "john", "email": "john@example.com"}
+```
+
+Result: `data.EMAIL = "john@example.com"`
+
+## ParseLR
+
+Extract text between left and right delimiters (simple string extraction).
+
+### Settings
+
+<ParamField path="input_var" type="string" default="data.SOURCE">
+  Variable containing text to parse
+</ParamField>
+
+<ParamField path="left" type="string" required>
+  Left boundary string
+</ParamField>
+
+<ParamField path="right" type="string" required>
+  Right boundary string
+</ParamField>
+
+<ParamField path="output_var" type="string" default="PARSED">
+  Variable name to store extracted text
+</ParamField>
+
+<ParamField path="capture" type="boolean" default="false">
+  Capture as user-visible variable
+</ParamField>
+
+<ParamField path="recursive" type="boolean" default="false">
+  Extract all matches (creates array)
+</ParamField>
+
+<ParamField path="case_insensitive" type="boolean" default="false">
+  Ignore case when matching delimiters
+</ParamField>
+
+### Example
+
+```json
+{
+  "block_type": "ParseLR",
+  "label": "Extract Session ID",
+  "settings": {
+    "type": "ParseLR",
+    "left": "session_id=",
+    "right": ";",
+    "output_var": "SESSION",
+    "capture": true
+  }
+}
+```
+
+Given text:
+```
+Set-Cookie: session_id=xyz789; Path=/; HttpOnly
+```
+
+Result: `data.SESSION = "xyz789"`
+
+## ParseCSS
+
+Query HTML documents using CSS selectors.
+
+### Settings
+
+<ParamField path="input_var" type="string" default="data.SOURCE">
+  Variable containing HTML to parse
+</ParamField>
+
+<ParamField path="selector" type="string" required>
+  CSS selector
+  
+  Examples:
+  - `div.username` - Element with class
+  - `#token` - Element by ID
+  - `input[name='csrf']` - Input by attribute
+  - `table tr:first-child td` - Table cells
+</ParamField>
+
+<ParamField path="attribute" type="string" default="innerText">
+  Attribute to extract
+  
+  Special values:
+  - `innerText` - Text content
+  - `innerHTML` - HTML content
+  - `value` - Form input value
+  - Any HTML attribute name
+</ParamField>
+
+<ParamField path="output_var" type="string" default="PARSED">
+  Variable name to store result
+</ParamField>
+
+<ParamField path="capture" type="boolean" default="false">
+  Capture as user-visible variable
+</ParamField>
+
+<ParamField path="index" type="number" default="0">
+  Index of element to extract (when multiple matches)
+</ParamField>
+
+### Example
+
+```json
+{
+  "block_type": "ParseCSS",
+  "label": "Extract CSRF Token",
+  "settings": {
+    "type": "ParseCSS",
+    "selector": "input[name='_token']",
+    "attribute": "value",
+    "output_var": "CSRF",
+    "capture": true
+  }
+}
+```
+
+Given HTML:
+```html
+<form>
+  <input type="hidden" name="_token" value="csrf-abc123">
+</form>
+```
+
+Result: `data.CSRF = "csrf-abc123"`
+
+## ParseXPath
+
+Query XML/HTML documents using XPath expressions.
+
+### Settings
+
+<ParamField path="input_var" type="string" default="data.SOURCE">
+  Variable containing XML/HTML to parse
+</ParamField>
+
+<ParamField path="xpath" type="string" required>
+  XPath expression
+  
+  Examples:
+  - `//div[@class='username']/text()` - Text content
+  - `//meta[@name='csrf-token']/@content` - Attribute value
+  - `//table//tr[1]/td[2]` - Table cell
+</ParamField>
+
+<ParamField path="output_var" type="string" default="PARSED">
+  Variable name to store result
+</ParamField>
+
+<ParamField path="capture" type="boolean" default="false">
+  Capture as user-visible variable
+</ParamField>
+
+### Example
+
+```json
+{
+  "block_type": "ParseXPath",
+  "label": "Extract Meta Token",
+  "settings": {
+    "type": "ParseXPath",
+    "xpath": "//meta[@name='csrf-token']/@content",
+    "output_var": "CSRF",
+    "capture": true
+  }
+}
+```
+
+## ParseCookie
+
+Extract a specific cookie from the cookie jar.
+
+### Settings
+
+<ParamField path="input_var" type="string" default="data.COOKIES">
+  Variable containing cookies
+</ParamField>
+
+<ParamField path="cookie_name" type="string" required>
+  Name of cookie to extract
+</ParamField>
+
+<ParamField path="output_var" type="string" default="PARSED">
+  Variable name to store cookie value
+</ParamField>
+
+<ParamField path="capture" type="boolean" default="false">
+  Capture as user-visible variable
+</ParamField>
+
+### Example
+
+```json
+{
+  "block_type": "ParseCookie",
+  "label": "Extract Session Cookie",
+  "settings": {
+    "type": "ParseCookie",
+    "cookie_name": "PHPSESSID",
+    "output_var": "SESSION_ID",
+    "capture": true
+  }
+}
+```
+
+## LambdaParser
+
+Execute custom JavaScript expressions to transform data.
+
+### Settings
+
+<ParamField path="input_var" type="string" default="data.SOURCE">
+  Variable containing input data
+</ParamField>
+
+<ParamField path="lambda_expression" type="string" default="x => x.split(',')[0]">
+  JavaScript arrow function expression
+  
+  The input is available as `x`
+  
+  Examples:
+  - `x => x.split(',')[0]` - First CSV item
+  - `x => x.trim().toUpperCase()` - Uppercase trimmed
+  - `x => JSON.parse(x).data.token` - Parse and extract
+</ParamField>
+
+<ParamField path="output_var" type="string" default="RESULT">
+  Variable name to store result
+</ParamField>
+
+<ParamField path="capture" type="boolean" default="false">
+  Capture as user-visible variable
+</ParamField>
+
+### Example
+
+```json
+{
+  "block_type": "LambdaParser",
+  "label": "Extract First Name",
+  "settings": {
+    "type": "LambdaParser",
+    "input_var": "data.FULL_NAME",
+    "lambda_expression": "x => x.split(' ')[0]",
+    "output_var": "FIRST_NAME",
+    "capture": true
+  }
+}
+```
+
+## Unified Parse Block
+
+The `Parse` block combines all parsing modes into a single configurable block.
+
+### Settings
+
+<ParamField path="parse_mode" type="ParseMode" default="LR">
+  Parsing method: `LR`, `Regex`, `Json`, `Css`, `XPath`, `Cookie`, `Lambda`
+</ParamField>
+
+<ParamField path="input_var" type="string" default="data.SOURCE">
+  Variable containing data to parse
+</ParamField>
+
+<ParamField path="output_var" type="string" default="PARSED">
+  Variable name to store result
+</ParamField>
+
+<ParamField path="capture" type="boolean" default="false">
+  Capture as user-visible variable
+</ParamField>
+
+### Mode-Specific Settings
+
+Additional settings depend on the selected `parse_mode`. See individual parser documentation above.
+
+## Best Practices
+
+1. **Use the simplest parser** that meets your needs (LR is faster than Regex)
+2. **Test patterns** with sample data before deployment
+3. **Set capture=true** only for variables you need in results
+4. **Use descriptive output_var names** for clarity
+5. **Chain parsers** when extracting nested data

@@ -1,0 +1,390 @@
+---
+title: CLI Mode
+description: Run IronBullet pipelines from the command line without the GUI
+---
+
+CLI Mode allows you to execute IronBullet pipelines directly from the terminal, perfect for automation, scripting, and server environments.
+
+## Overview
+
+When you launch IronBullet with `--config` or `--help` arguments, it runs in headless CLI mode instead of opening the GUI. This enables integration with scripts, cron jobs, and CI/CD pipelines.
+
+## Basic Usage
+
+```bash
+ironbullet --config pipeline.rfx --wordlist combos.txt
+```
+
+This runs the pipeline against your wordlist and outputs results to stdout.
+
+## Command-Line Arguments
+
+### Required Arguments
+
+**`--config`, `-c`**: Path to configuration file
+```bash
+--config myconfig.rfx
+```
+
+Supported formats:
+- `.rfx` - IronBullet native format
+- `.svb` - SilverBullet config
+- `.opk` - OpenBullet config
+- `.loli` - LoliCode script
+- `.json` - Pipeline JSON
+
+**`--wordlist`, `-w`**: Path to wordlist file
+```bash
+--wordlist /path/to/combos.txt
+```
+
+Format: One entry per line, matching your pipeline's data settings (e.g., `username:password`).
+
+### Optional Arguments
+
+**`--threads`, `-t`**: Number of threads (overrides config)
+```bash
+--threads 200
+```
+
+Default: Uses thread count from pipeline configuration.
+
+**`--proxies`, `-p`**: Proxy list file
+```bash
+--proxies proxies.txt
+```
+
+Format: One proxy per line (`http://ip:port` or `user:pass@ip:port`).
+
+**`--outfile`, `-o`**: Output directory for results
+```bash
+--outfile ./results
+```
+
+Default: `results/`
+
+**`--skip`**: Skip first N lines of wordlist
+```bash
+--skip 10000
+```
+
+Useful for resuming interrupted runs.
+
+**`--take`**: Process only N lines (0 = all)
+```bash
+--take 5000
+```
+
+Process lines 1-5000 only.
+
+**`--debug`, `-d`**: Print detailed block results to stderr
+```bash
+--debug
+```
+
+Shows execution details for each block.
+
+**`--help`, `-h`**: Show help message
+```bash
+ironbullet --help
+```
+
+## Complete Examples
+
+### Basic Run
+
+```bash
+ironbullet \
+  --config netflix.rfx \
+  --wordlist combos.txt
+```
+
+Runs with default settings from the config file.
+
+### High-Performance Run with Proxies
+
+```bash
+ironbullet \
+  --config checker.rfx \
+  --wordlist accounts.txt \
+  --threads 500 \
+  --proxies proxy_list.txt \
+  --outfile ./output
+```
+
+### Resume from Line 50,000
+
+```bash
+ironbullet \
+  --config config.rfx \
+  --wordlist large_list.txt \
+  --skip 50000 \
+  --threads 300
+```
+
+### Debug Mode with Limited Data
+
+```bash
+ironbullet \
+  --config test.rfx \
+  --wordlist sample.txt \
+  --take 100 \
+  --debug
+```
+
+Tests with first 100 lines and shows detailed output.
+
+## Output
+
+### Standard Output (stdout)
+
+Hits are printed to stdout in real-time:
+
+```
+[HIT] admin:password123
+[HIT] user@test.com:secret456 | TOKEN=abc123 | BALANCE=500
+[HIT] demo:demo123 | PREMIUM=true
+```
+
+Format: `[HIT] {data_line} | {captures}`
+
+You can redirect to a file:
+```bash
+ironbullet -c config.rfx -w wordlist.txt > hits.txt
+```
+
+### Standard Error (stderr)
+
+Progress and statistics are printed to stderr:
+
+```
+[*] loaded config: Netflix Checker (12 blocks)
+[*] wordlist: 100000 lines (skip=0, take=0)
+[*] proxies: 1000 loaded
+[*] starting with 200 threads
+[*] 45200/100000 | hits:234 fails:44850 errors:116 | cpm:1847 | threads:200
+[*] done in 54.2s — 100000 processed, 234 hits, 99650 fails, 116 errors
+[*] 234 hits printed to stdout
+```
+
+Redirect progress to a log file:
+```bash
+ironbullet -c config.rfx -w wordlist.txt 2> progress.log
+```
+
+### File Output
+
+If your pipeline has "Save to file" enabled in Output Settings, results are saved to:
+
+```
+results/
+  hits_20260303_143022.txt
+  fails_20260303_143022.txt
+```
+
+Format is customizable in pipeline Output Settings.
+
+## Integration Examples
+
+### Bash Script
+
+```bash
+#!/bin/bash
+
+CONFIG="checker.rfx"
+WORDLIST="wordlists/combos.txt"
+THREADS=300
+
+echo "Starting checker at $(date)"
+
+ironbullet \
+  --config "$CONFIG" \
+  --wordlist "$WORDLIST" \
+  --threads $THREADS \
+  --outfile results \
+  > hits_$(date +%Y%m%d_%H%M%S).txt \
+  2> log_$(date +%Y%m%d_%H%M%S).txt
+
+echo "Finished at $(date)"
+```
+
+### Python Automation
+
+```python
+import subprocess
+import os
+from datetime import datetime
+
+def run_checker(config, wordlist, threads=100):
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    hits_file = f"hits_{timestamp}.txt"
+    log_file = f"log_{timestamp}.txt"
+    
+    with open(hits_file, 'w') as hits, open(log_file, 'w') as log:
+        process = subprocess.run([
+            'ironbullet',
+            '--config', config,
+            '--wordlist', wordlist,
+            '--threads', str(threads)
+        ], stdout=hits, stderr=log)
+    
+    return hits_file, log_file
+
+hits, log = run_checker('checker.rfx', 'combos.txt', threads=200)
+print(f"Results saved to {hits}")
+```
+
+### Cron Job
+
+```cron
+# Run checker every day at 2 AM
+0 2 * * * /usr/local/bin/ironbullet -c /home/user/config.rfx -w /home/user/daily.txt >> /home/user/logs/daily_$(date +\%Y\%m\%d).log 2>&1
+```
+
+### Docker Integration
+
+```dockerfile
+FROM ubuntu:22.04
+
+# Copy IronBullet binary
+COPY ironbullet /usr/local/bin/ironbullet
+RUN chmod +x /usr/local/bin/ironbullet
+
+# Copy configs and wordlists
+COPY configs/ /configs/
+COPY wordlists/ /wordlists/
+
+# Run checker
+CMD ["ironbullet", "-c", "/configs/default.rfx", "-w", "/wordlists/input.txt"]
+```
+
+Run:
+```bash
+docker build -t my-checker .
+docker run -v $(pwd)/results:/results my-checker
+```
+
+## Performance Tuning
+
+### Maximize Throughput
+
+```bash
+# High thread count, fast timeout, no file output
+ironbullet \
+  --config speed.rfx \
+  --wordlist huge.txt \
+  --threads 1000 \
+  --proxies fast_proxies.txt
+```
+
+Edit config to set:
+- Timeout: 5000ms
+- Save to file: disabled
+- Retries: 0
+
+### Reliability Over Speed
+
+```bash
+# Lower threads, longer timeout, retries enabled
+ironbullet \
+  --config reliable.rfx \
+  --wordlist combos.txt \
+  --threads 50
+```
+
+Edit config to set:
+- Timeout: 30000ms
+- Max retries: 3
+- Gradual thread start: enabled
+
+## Process Management
+
+### Run in Background
+
+```bash
+nohup ironbullet -c config.rfx -w wordlist.txt > hits.txt 2> log.txt &
+```
+
+Check progress:
+```bash
+tail -f log.txt
+```
+
+### Kill Running Process
+
+```bash
+pkill ironbullet
+```
+
+### Check Exit Code
+
+```bash
+ironbullet -c config.rfx -w wordlist.txt
+if [ $? -eq 0 ]; then
+    echo "Success!"
+else
+    echo "Failed with code $?"
+fi
+```
+
+Exit codes:
+- `0`: Success
+- `1`: Error (config not found, invalid arguments, etc.)
+
+## Limitations
+
+<Warning>
+CLI mode does not support:
+- Live GUI interaction
+- Visual debugging (use `--debug` flag instead)
+- Real-time hit preview (hits print to stdout as they occur)
+</Warning>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="'ironbullet' command not found">
+    Add IronBullet to your PATH:
+    
+    **Windows:**
+    ```cmd
+    setx PATH "%PATH%;C:\path\to\ironbullet"
+    ```
+    
+    **Linux/Mac:**
+    ```bash
+    export PATH=$PATH:/path/to/ironbullet
+    ```
+  </Accordion>
+
+  <Accordion title="Config file not found">
+    Use absolute paths:
+    ```bash
+    ironbullet -c /full/path/to/config.rfx -w /full/path/to/wordlist.txt
+    ```
+  </Accordion>
+
+  <Accordion title="No output appearing">
+    - Check stderr for errors: `ironbullet ... 2>&1 | tee output.log`
+    - Verify wordlist path is correct
+    - Ensure pipeline has valid blocks
+  </Accordion>
+
+  <Accordion title="Process exits immediately">
+    Add `--debug` to see detailed error messages:
+    ```bash
+    ironbullet -c config.rfx -w wordlist.txt --debug
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Jobs" icon="briefcase" href="/features/jobs">
+    Learn about GUI-based job management
+  </Card>
+  <Card title="Export Code" icon="code" href="/features/export-code">
+    Generate standalone executables from pipelines
+  </Card>
+</CardGroup>

@@ -1,0 +1,262 @@
+---
+title: 'Performance Tuning'
+description: 'Optimize thread pools, concurrency, and execution speed'
+icon: 'gauge-high'
+---
+
+## Thread Pool Configuration
+
+IronBullet uses a multi-threaded worker pool to process credentials concurrently. Understanding how to configure thread count and startup behavior is critical for maximizing throughput.
+
+### Thread Count
+
+The runner spawns worker tasks using Tokio's async runtime. Each worker:
+
+- Pulls data from the shared `DataPool` (atomic counter, lock-free reads)
+- Executes the pipeline blocks sequentially
+- Returns results to the shared stats and output channels
+
+**Default**: 1 thread  
+**Recommended**: Start with `threads = CPU_cores * 2` for I/O-bound workloads (HTTP requests, parsing).
+
+<CodeGroup>
+```rust src/runner/mod.rs
+pub struct RunnerOrchestrator {
+    thread_count: usize,
+    running: Arc<AtomicBool>,
+    stats: Arc<RunnerStatsInner>,
+    // ...
+}
+
+pub async fn start(&self) {
+    for i in 0..self.thread_count {
+        let handle = tokio::spawn(async move {
+            worker::run_worker(
+                pipeline, proxy_mode, max_retries,
+                data_pool, proxy_pool, sidecar_tx,
+                running, paused, stats, hits_tx,
+                output_writer, plugin_manager, result_feed,
+            ).await;
+        });
+        handles.push(handle);
+    }
+}
+```
+</CodeGroup>
+
+### Gradual Thread Start
+
+Starting all threads at once can overwhelm rate-limited APIs. Enable gradual startup to ramp workers over time:
+
+```rust src/runner/mod.rs
+let gradual = pipeline.runner_settings.start_threads_gradually;
+let delay_ms = pipeline.runner_settings.gradual_delay_ms;
+
+// Cap total ramp-up time to 3s
+let effective_delay_ms = if gradual && self.thread_count > 1 {
+    let cap = (3000u64 / self.thread_count as u64).max(1);
+    delay_ms.min(cap)
+} else {
+    delay_ms
+};
+
+for i in 0..self.thread_count {
+    if gradual && i > 0 {
+        tokio::time::sleep(Duration::from_millis(effective_delay_ms)).await;
+    }
+    // spawn worker...
+}
+```
+
+<Tip>
+For 1000 threads with `gradual_delay_ms = 100`, the effective delay is capped at 3ms per thread to avoid a 100-second startup.
+</Tip>
+
+## Data Pool Optimization
+
+The `DataPool` uses an atomic counter for lock-free credential distribution:
+
+```rust src/runner/data_pool.rs
+pub struct DataPool {
+    lines: Vec<String>,
+    index: AtomicUsize,           // Lock-free counter
+    retry_queue: Mutex<Vec<(String, u32)>>,
+}
+
+pub fn next_line(&self) -> Option<(String, u32)> {
+    // Retry queue has priority (mutex only when retries exist)
+    if let Ok(mut queue) = self.retry_queue.lock() {
+        if let Some(entry) = queue.pop() {
+            return Some(entry);
+        }
+    }
+    // Atomic fetch-add: O(1), no locks
+    let idx = self.index.fetch_add(1, Ordering::Relaxed);
+    self.lines.get(idx).map(|l| (l.clone(), 0))
+}
+```
+
+**Key insights**:
+- `fetch_add` is lock-free → zero contention between workers
+- Retry queue uses `Mutex` but is rarely accessed (only on BAN/RETRY status)
+- Pre-load data into memory — file I/O per credential kills throughput
+
+## Proxy Pool Optimization
+
+The `ProxyPool` uses `RwLock` for concurrent reads with exclusive writes:
+
+```rust src/runner/proxy_pool.rs
+pub struct ProxyPool {
+    proxies: Vec<ProxyEntry>,
+    index: AtomicUsize,
+    bans: RwLock<HashMap<String, Instant>>,  // Read-heavy workload
+    ban_duration_secs: u64,
+}
+
+pub fn next_proxy(&self) -> Option<String> {
+    let bans = self.bans.read().unwrap();  // Multiple readers OK
+    
+    let start = self.index.fetch_add(1, Ordering::Relaxed);
+    for i in 0..self.proxies.len() {
+        let idx = (start + i) % self.proxies.len();
+        let proxy = &self.proxies[idx];
+        
+        if !is_banned(&bans, proxy) {
+            return Some(proxy.to_string());
+        }
+    }
+    // Return banned proxy rather than None (keeps workers active)
+    Some(self.proxies[start % self.proxies.len()].to_string())
+}
+```
+
+<Note>
+Using `RwLock` instead of `Mutex` allows concurrent `next_proxy()` calls. Only `ban_proxy()` requires exclusive write access.
+</Note>
+
+## Session Isolation
+
+Each credential gets a fresh session ID to prevent cookie jar contamination:
+
+```rust src/runner/worker.rs
+while running.load(Ordering::Relaxed) {
+    let (data_line, retry_count) = data_pool.next_line()?;
+    
+    // Fresh session per credential — isolated cookie jars
+    let session_id = Uuid::new_v4().to_string();
+    sidecar_tx.send(SidecarRequest::NewSession { session_id, .. }).await;
+    
+    let mut ctx = ExecutionContext::new(session_id);
+    ctx.execute_blocks(&pipeline.blocks, &sidecar_tx).await;
+    
+    // Release session immediately after execution
+    sidecar_tx.send(SidecarRequest::CloseSession { session_id }).await;
+}
+```
+
+**Why this matters**: A shared session would accumulate cookies/state across credentials, causing false errors when one blocked account taints all subsequent checks.
+
+## Concurrency Best Practices
+
+### 1. Avoid blocking operations in workers
+
+<Warning>
+Never use `std::thread::sleep` or blocking I/O in async workers. Use `tokio::time::sleep` and async file/network APIs.
+</Warning>
+
+### 2. Tune retry limits
+
+```rust
+max_retries: 3  // Default
+```
+
+High retry counts amplify load on RETRY/BAN responses. Monitor `stats.retries` and adjust.
+
+### 3. Profile with CPM (checks per minute)
+
+```rust src/runner/mod.rs
+pub fn get_stats(&self) -> RunnerStats {
+    let elapsed_secs = (now - start_time) as f64 / 1000.0;
+    let cpm = if elapsed_secs > 0.0 {
+        processed as f64 / elapsed_secs * 60.0
+    } else {
+        0.0
+    };
+    // ...
+}
+```
+
+Monitor CPM in real-time. If it plateaus, you've hit I/O limits (increase threads) or rate limits (add proxies, reduce threads).
+
+### 4. Proxy mode selection
+
+- **None**: Fastest (no proxy overhead)
+- **Sticky**: One proxy per worker thread (session affinity)
+- **Rotate**: Round-robin per request (best for distributed bans)
+
+## Memory Optimization
+
+### Result Feed Ring Buffer
+
+The live result feed is capped at 100 entries to avoid unbounded memory growth:
+
+```rust src/runner/mod.rs
+const RESULT_FEED_CAP: usize = 100;
+
+if feed.len() >= RESULT_FEED_CAP {
+    feed.pop_front();  // FIFO eviction
+}
+feed.push_back(ResultEntry { /* ... */ });
+```
+
+If you need longer history, increase `RESULT_FEED_CAP` or log to disk instead.
+
+### Avoid capturing large response bodies
+
+If you're checking millions of credentials, storing full HTML responses in `BlockResult.response.body` will OOM. Use safe mode and parse only what you need:
+
+```yaml
+blocks:
+  - type: HttpRequest
+    safe_mode: true  # Errors don't halt the worker
+  - type: ParseJSON
+    json_path: ".user.balance"  # Extract only the field you need
+    output_var: balance
+```
+
+## Benchmarking Tips
+
+1. **Warmup period**: First 5-10 seconds include DNS/TLS handshake overhead. Measure CPM after warmup.
+2. **Proxy latency**: Add 100-500ms per request when using proxies. Profile with `timing_ms` in `NetworkEntry`.
+3. **Parser overhead**: Regex/JSON parsing is CPU-bound. If CPM drops with complex parsing, reduce thread count or optimize patterns.
+
+<Accordion title="Example: Profiling a slow pipeline">
+1. Run with 10 threads, measure CPM
+2. Double threads to 20. If CPM doesn't increase, you're I/O bound (network/proxy latency)
+3. Check `network_log` timing: if avg > 1000ms, proxies are slow
+4. Check `block_results` timing: if Parse blocks > 100ms, optimize regex patterns
+</Accordion>
+
+## Production Checklist
+
+<Steps>
+<Step title="Load test with small dataset">
+Run 1000 credentials with your production config. Watch for memory leaks, proxy bans, or timeout spikes.
+</Step>
+
+<Step title="Tune thread count">
+Start conservative (threads = CPU cores), then increment by 10-20% until CPM plateaus.
+</Step>
+
+<Step title="Enable gradual start">
+For thread counts > 100, enable gradual startup to avoid thundering herd on rate-limited APIs.
+</Step>
+
+<Step title="Monitor stats in real-time">
+```rust
+let stats = orchestrator.get_stats();
+println!("CPM: {:.1}, Active: {}, Retries: {}", 
+    stats.cpm, stats.active_threads, stats.retries);
+```
+</Step>
+</Steps>

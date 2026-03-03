@@ -1,0 +1,458 @@
+---
+title: 'Function Blocks'
+description: 'Transform data with string, list, crypto, conversion, date, and math functions'
+---
+
+## Overview
+
+Function blocks transform and manipulate data within your pipeline. IronBullet provides comprehensive function libraries for:
+
+- String manipulation
+- List operations
+- Cryptographic hashing and encryption
+- Type conversion and encoding
+- Date and time operations
+- Float and integer mathematics
+- Time zone conversions
+
+## String Functions
+
+Manipulate text and strings.
+
+### Settings
+
+<ParamField path="function_type" type="StringFnType" required>
+  Operation to perform:
+  - `Replace` - Replace text
+  - `Substring` - Extract substring
+  - `Trim` - Remove whitespace
+  - `ToUpper` - Convert to uppercase
+  - `ToLower` - Convert to lowercase
+  - `URLEncode` - URL encode
+  - `URLDecode` - URL decode
+  - `Base64Encode` - Base64 encode
+  - `Base64Decode` - Base64 decode
+  - `HTMLEntityEncode` - Encode HTML entities
+  - `HTMLEntityDecode` - Decode HTML entities
+  - `Split` - Split by delimiter
+  - `RandomString` - Generate random string
+  - `Reverse` - Reverse string
+  - `Length` - Get string length
+</ParamField>
+
+<ParamField path="input_var" type="string" required>
+  Variable containing input string
+</ParamField>
+
+<ParamField path="output_var" type="string" default="RESULT">
+  Variable name to store result
+</ParamField>
+
+<ParamField path="capture" type="boolean" default="false">
+  Capture as user-visible variable
+</ParamField>
+
+<ParamField path="param1" type="string">
+  Function-specific parameter (e.g., search string, start index)
+</ParamField>
+
+<ParamField path="param2" type="string">
+  Function-specific parameter (e.g., replacement string, length)
+</ParamField>
+
+### Examples
+
+```json
+{
+  "block_type": "StringFunction",
+  "label": "URL Encode Email",
+  "settings": {
+    "type": "StringFunction",
+    "function_type": "URLEncode",
+    "input_var": "input.USER",
+    "output_var": "ENCODED_EMAIL"
+  }
+}
+```
+
+```json
+{
+  "block_type": "StringFunction",
+  "label": "Replace Spaces",
+  "settings": {
+    "type": "StringFunction",
+    "function_type": "Replace",
+    "input_var": "data.USERNAME",
+    "param1": " ",
+    "param2": "_",
+    "output_var": "CLEAN_USERNAME"
+  }
+}
+```
+
+## List Functions
+
+Manipulate arrays and lists.
+
+### Settings
+
+<ParamField path="function_type" type="ListFnType" required>
+  Operation to perform:
+  - `Join` - Join array into string
+  - `Sort` - Sort array
+  - `Shuffle` - Randomize order
+  - `Add` - Add item to list
+  - `Remove` - Remove item from list
+  - `Deduplicate` - Remove duplicates
+  - `RandomItem` - Pick random item
+  - `Length` - Get list length
+</ParamField>
+
+<ParamField path="input_var" type="string" required>
+  Variable containing input list
+</ParamField>
+
+<ParamField path="output_var" type="string" default="RESULT">
+  Variable name to store result
+</ParamField>
+
+<ParamField path="capture" type="boolean" default="false">
+  Capture as user-visible variable
+</ParamField>
+
+<ParamField path="param1" type="string">
+  Function-specific parameter (e.g., delimiter, item to add)
+</ParamField>
+
+### Example
+
+```json
+{
+  "block_type": "ListFunction",
+  "label": "Join Tags",
+  "settings": {
+    "type": "ListFunction",
+    "function_type": "Join",
+    "input_var": "data.TAGS_ARRAY",
+    "param1": ",",
+    "output_var": "TAGS_STRING"
+  }
+}
+```
+
+## Crypto Functions
+
+Hashing, encryption, and cryptographic operations.
+
+### Settings
+
+<ParamField path="function_type" type="CryptoFnType" required>
+  Cryptographic operation:
+  - `MD5` - MD5 hash
+  - `SHA1` - SHA-1 hash
+  - `SHA256` - SHA-256 hash
+  - `SHA512` - SHA-512 hash
+  - `SHA384` - SHA-384 hash
+  - `CRC32` - CRC32 checksum
+  - `HMACSHA256` - HMAC-SHA256
+  - `HMACSHA512` - HMAC-SHA512
+  - `HMACMD5` - HMAC-MD5
+  - `BCryptHash` - BCrypt hash
+  - `BCryptVerify` - BCrypt verification
+  - `Base64Encode` - Base64 encode
+  - `Base64Decode` - Base64 decode
+  - `AESEncrypt` - AES encryption
+  - `AESDecrypt` - AES decryption
+</ParamField>
+
+<ParamField path="input_var" type="string" required>
+  Variable containing input data
+</ParamField>
+
+<ParamField path="output_var" type="string" default="HASH">
+  Variable name to store result
+</ParamField>
+
+<ParamField path="capture" type="boolean" default="false">
+  Capture as user-visible variable
+</ParamField>
+
+<ParamField path="key" type="string">
+  Encryption key or HMAC secret (required for HMAC/AES operations)
+</ParamField>
+
+### Examples
+
+```json
+{
+  "block_type": "CryptoFunction",
+  "label": "Hash Password",
+  "settings": {
+    "type": "CryptoFunction",
+    "function_type": "SHA256",
+    "input_var": "input.PASS",
+    "output_var": "PASS_HASH"
+  }
+}
+```
+
+```json
+{
+  "block_type": "CryptoFunction",
+  "label": "HMAC Signature",
+  "settings": {
+    "type": "CryptoFunction",
+    "function_type": "HMACSHA256",
+    "input_var": "data.PAYLOAD",
+    "key": "<data.API_SECRET>",
+    "output_var": "SIGNATURE"
+  }
+}
+```
+
+## Conversion Functions
+
+Type conversion and encoding transformations.
+
+### Settings
+
+<ParamField path="op" type="ConversionOp" required>
+  Conversion operation:
+  - `StringToInt` - Parse integer
+  - `IntToString` - Convert to string
+  - `StringToFloat` - Parse float
+  - `FloatToString` - Convert to string
+  - `BoolToString` - Convert boolean
+  - `StringToBool` - Parse boolean
+  - `IntToFloat` - Convert to float
+  - `FloatToInt` - Truncate to integer
+  - `Base64Encode` / `Base64Decode`
+  - `HexEncode` / `HexDecode`
+  - `UrlEncode` / `UrlDecode`
+  - `HtmlEncode` / `HtmlDecode`
+  - `StringToBytes` / `BytesToString`
+  - `IntToBytes` / `BytesToInt`
+  - `BigIntToBytes` / `BytesToBigInt`
+  - `BytesToBinaryString` / `BinaryStringToBytes`
+  - `ReadableSize` - Format bytes as KB/MB/GB
+  - `NumberToWords` - Convert number to words
+  - `WordsToNumber` - Parse words to number
+  - `SvgToPng` - Convert SVG to PNG
+</ParamField>
+
+<ParamField path="input_var" type="string" required>
+  Variable containing input data
+</ParamField>
+
+<ParamField path="output_var" type="string" default="CONVERTED">
+  Variable name to store result
+</ParamField>
+
+<ParamField path="capture" type="boolean" default="false">
+  Capture as user-visible variable
+</ParamField>
+
+<ParamField path="encoding" type="string" default="utf8">
+  Text encoding for byte operations
+</ParamField>
+
+<ParamField path="endianness" type="string" default="big">
+  Byte order: `big` or `little`
+</ParamField>
+
+<ParamField path="byte_count" type="number" default="4">
+  Number of bytes for integer conversions
+</ParamField>
+
+### Example
+
+```json
+{
+  "block_type": "ConversionFunction",
+  "label": "Decode Base64",
+  "settings": {
+    "type": "ConversionFunction",
+    "op": "Base64Decode",
+    "input_var": "data.ENCODED_DATA",
+    "output_var": "DECODED_DATA"
+  }
+}
+```
+
+## Date Functions
+
+Date and time operations.
+
+### Settings
+
+<ParamField path="function_type" type="DateFnType" required>
+  Date operation:
+  - `Now` - Current date/time
+  - `FormatDate` - Format date string
+  - `ParseDate` - Parse date from string
+  - `AddTime` - Add duration
+  - `SubtractTime` - Subtract duration
+  - `UnixTimestamp` - Convert to Unix timestamp
+  - `UnixToDate` - Convert from Unix timestamp
+  - `CurrentUnixTimeMs` - Current time in milliseconds
+  - `Compute` - Evaluate math expression
+  - `Round` - Round number to decimals
+  - `DateToUnix` - Parse to Unix seconds
+  - `DateToUnixMs` - Parse to Unix milliseconds
+</ParamField>
+
+<ParamField path="input_var" type="string">
+  Variable containing input date (for parse/convert operations)
+</ParamField>
+
+<ParamField path="output_var" type="string" default="DATE">
+  Variable name to store result
+</ParamField>
+
+<ParamField path="format" type="string" default="%Y-%m-%d %H:%M:%S">
+  Date format string (strftime format)
+</ParamField>
+
+<ParamField path="amount" type="number" default="0">
+  Amount to add/subtract
+</ParamField>
+
+<ParamField path="unit" type="string" default="seconds">
+  Time unit: `seconds`, `minutes`, `hours`, `days`
+</ParamField>
+
+<ParamField path="capture" type="boolean" default="false">
+  Capture as user-visible variable
+</ParamField>
+
+<ParamField path="param" type="string">
+  Extra parameter for Compute (expression) or Round (decimal places)
+</ParamField>
+
+### Examples
+
+```json
+{
+  "block_type": "DateFunction",
+  "label": "Current Timestamp",
+  "settings": {
+    "type": "DateFunction",
+    "function_type": "CurrentUnixTimeMs",
+    "output_var": "TIMESTAMP"
+  }
+}
+```
+
+```json
+{
+  "block_type": "DateFunction",
+  "label": "Format Date",
+  "settings": {
+    "type": "DateFunction",
+    "function_type": "Now",
+    "format": "%Y-%m-%d",
+    "output_var": "TODAY"
+  }
+}
+```
+
+## Float Functions
+
+Floating-point math operations.
+
+### Settings
+
+<ParamField path="function_type" type="FloatFnType" required>
+  Math operation:
+  - `Round`, `Ceil`, `Floor`, `Abs`
+  - `Add`, `Subtract`, `Multiply`, `Divide`
+  - `Power`, `Sqrt`, `Min`, `Max`
+</ParamField>
+
+<ParamField path="input_var" type="string" required>
+  Variable containing first operand
+</ParamField>
+
+<ParamField path="param1" type="string">
+  Second operand (for binary operations)
+</ParamField>
+
+<ParamField path="param2" type="string">
+  Additional parameter (e.g., decimal places for Round)
+</ParamField>
+
+<ParamField path="output_var" type="string" default="RESULT">
+  Variable name to store result
+</ParamField>
+
+<ParamField path="capture" type="boolean" default="false">
+  Capture as user-visible variable
+</ParamField>
+
+## Integer Functions
+
+Integer math operations.
+
+### Settings
+
+<ParamField path="function_type" type="IntegerFnType" required>
+  Math operation:
+  - `Add`, `Subtract`, `Multiply`, `Divide`
+  - `Modulo`, `Power`, `Abs`, `Min`, `Max`
+</ParamField>
+
+<ParamField path="input_var" type="string" required>
+  Variable containing first operand
+</ParamField>
+
+<ParamField path="param1" type="string">
+  Second operand (for binary operations)
+</ParamField>
+
+<ParamField path="output_var" type="string" default="RESULT">
+  Variable name to store result
+</ParamField>
+
+<ParamField path="capture" type="boolean" default="false">
+  Capture as user-visible variable
+</ParamField>
+
+## Time Functions
+
+Time zone and duration operations.
+
+### Settings
+
+<ParamField path="function_type" type="TimeFnType" required>
+  Time operation:
+  - `ConvertTimezone` - Convert between time zones
+  - `GetTimezone` - Get current timezone
+  - `IsDST` - Check daylight saving time
+  - `DurationBetween` - Calculate duration
+  - `AddDuration` - Add time duration
+  - `SubtractDuration` - Subtract duration
+</ParamField>
+
+<ParamField path="input_var" type="string" required>
+  Variable containing input time
+</ParamField>
+
+<ParamField path="timezone" type="string" default="UTC">
+  Source timezone (IANA format)
+</ParamField>
+
+<ParamField path="target_timezone" type="string" default="America/New_York">
+  Target timezone for conversion
+</ParamField>
+
+<ParamField path="format" type="string" default="%Y-%m-%d %H:%M:%S">
+  Output format string
+</ParamField>
+
+<ParamField path="output_var" type="string" default="RESULT">
+  Variable name to store result
+</ParamField>
+
+<ParamField path="capture" type="boolean" default="false">
+  Capture as user-visible variable
+</ParamField>

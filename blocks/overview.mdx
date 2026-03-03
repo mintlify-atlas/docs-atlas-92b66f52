@@ -1,0 +1,221 @@
+---
+title: 'Block Reference Overview'
+description: 'Complete guide to IronBullet block types and categories'
+---
+
+## Introduction
+
+Blocks are the fundamental building blocks of IronBullet pipelines. Each block performs a specific task like making HTTP requests, parsing data, executing logic, or interacting with external services.
+
+## Block Categories
+
+IronBullet organizes 50+ block types into logical categories:
+
+### Requests
+Blocks that make network requests to external services.
+- **HttpRequest**: HTTP/HTTPS requests with advanced TLS fingerprinting
+- **TCP/UDP Requests**: Raw socket communication
+- **FTP/SSH Requests**: File transfer and remote command execution
+- **IMAP/SMTP/POP Requests**: Email protocol operations
+
+### Parsing
+Extract data from responses using various parsing methods.
+- **ParseJSON**: JSONPath queries
+- **ParseLR**: Left-right string extraction
+- **ParseRegex**: Regular expression matching
+- **ParseCSS**: CSS selector queries
+- **ParseXPath**: XPath queries
+- **ParseCookie**: Cookie extraction
+- **LambdaParser**: Custom JavaScript expressions
+- **Parse**: Unified parser with multiple modes
+
+### Functions
+Transform and manipulate data.
+- **String Functions**: Replace, trim, encode/decode, split
+- **List Functions**: Join, sort, shuffle, deduplicate
+- **Crypto Functions**: MD5, SHA, HMAC, AES encryption
+- **Conversion Functions**: Type conversion, encoding
+- **Date Functions**: Date formatting, arithmetic, Unix timestamps
+- **Float/Integer Functions**: Mathematical operations
+- **Time Functions**: Timezone conversion, duration calculations
+
+### Control Flow
+Manage pipeline execution flow.
+- **IfElse**: Conditional branching
+- **Loop**: Iterate over lists or repeat actions
+- **Delay**: Add random or fixed delays
+- **CaseSwitch**: Multi-case branching
+- **SetVariable**: Store values in variables
+- **Script**: Execute custom JavaScript code
+
+### Browser Automation
+Control headless browsers for dynamic content.
+- **BrowserOpen**: Launch browser instances
+- **NavigateTo**: Navigate to URLs
+- **ClickElement**: Click elements via CSS selectors
+- **TypeText**: Input text into forms
+- **WaitForElement**: Wait for elements to appear
+- **GetElementText**: Extract element content
+- **Screenshot**: Capture page screenshots
+- **ExecuteJs**: Run JavaScript in browser context
+
+### Bypass & Anti-Bot
+Bypass protection systems and solve challenges.
+- **CaptchaSolver**: Solve reCAPTCHA, hCaptcha via services
+- **CloudflareBypass**: Bypass Cloudflare challenges
+- **OcrCaptcha**: OCR-based captcha solving
+- **RecaptchaInvisible**: Handle invisible reCAPTCHA
+- **DataDomeSensor**: Generate DataDome sensor data
+- **AkamaiV3Sensor**: Encrypt/decrypt Akamai V3 payloads
+- **XacfSensor**: Generate XACF sensor data
+
+### Protocols
+Specialized protocol handlers.
+- **TcpRequest**: Raw TCP socket communication
+- **UdpRequest**: UDP datagrams
+- **FtpRequest**: FTP file operations (LIST, RETR, STOR)
+- **SshRequest**: SSH command execution
+- **ImapRequest**: IMAP email operations
+- **SmtpRequest**: SMTP email sending
+- **PopRequest**: POP3 email retrieval
+
+### Utilities
+Helper blocks for logging, webhooks, and data generation.
+- **Log**: Output messages to console
+- **Webhook**: Send HTTP webhooks
+- **WebSocket**: WebSocket communication
+- **Plugin**: Load custom plugin blocks
+- **RandomUserAgent**: Generate realistic user agents
+- **RandomData**: Generate random names, emails, addresses
+- **FileSystem**: File and folder operations
+
+## Block Structure
+
+Every block has these common properties:
+
+<ParamField path="id" type="string" required>
+  Unique UUID identifier for the block
+</ParamField>
+
+<ParamField path="block_type" type="BlockType" required>
+  The type of block (e.g., `HttpRequest`, `ParseJSON`)
+</ParamField>
+
+<ParamField path="label" type="string" required>
+  Human-readable label displayed in the UI
+</ParamField>
+
+<ParamField path="disabled" type="boolean" default="false">
+  When `true`, the block is skipped during execution
+</ParamField>
+
+<ParamField path="safe_mode" type="boolean" default="false">
+  When `true`, errors in this block won't halt the pipeline
+</ParamField>
+
+<ParamField path="settings" type="BlockSettings" required>
+  Block-specific configuration (varies by block type)
+</ParamField>
+
+## Variable System
+
+Blocks interact through a shared variable system:
+
+### Variable Scopes
+- `input.*`: Input data from wordlist (e.g., `input.USER`, `input.PASS`)
+- `data.*`: Runtime variables set by blocks (e.g., `data.SOURCE`, `data.RESPONSECODE`)
+- `globals.*`: Global variables shared across all data entries
+
+### Common Variables
+- `data.SOURCE`: HTTP response body (default for HttpRequest)
+- `data.RESPONSECODE`: HTTP status code
+- `data.HEADERS`: Response headers
+- `data.COOKIES`: Response cookies
+- `data.ADDRESS`: Response URL after redirects
+
+### Variable Interpolation
+
+Use angle brackets to interpolate variables in block settings:
+
+```json
+{
+  "url": "https://api.example.com/user/<input.USER>",
+  "body": "{\"token\":\"<data.AUTH_TOKEN>\"}"
+}
+```
+
+## Capture Mode
+
+Many blocks have a `capture` setting:
+- `true`: Store result as user-visible captured variable
+- `false`: Store only in temporary runtime variables
+
+Captured variables appear in the job results and exports.
+
+## Example Pipeline
+
+Here's a simple login pipeline:
+
+```json
+{
+  "blocks": [
+    {
+      "id": "...",
+      "block_type": "HttpRequest",
+      "label": "Login Request",
+      "settings": {
+        "type": "HttpRequest",
+        "method": "POST",
+        "url": "https://httpbin.org/post",
+        "body": "{\"user\":\"<input.USER>\",\"pass\":\"<input.PASS>\"}",
+        "body_type": "Raw"
+      }
+    },
+    {
+      "id": "...",
+      "block_type": "ParseJSON",
+      "label": "Extract Token",
+      "settings": {
+        "type": "ParseJSON",
+        "json_path": "json.token",
+        "output_var": "AUTH_TOKEN",
+        "capture": true
+      }
+    },
+    {
+      "id": "...",
+      "block_type": "KeyCheck",
+      "label": "Check Success",
+      "settings": {
+        "type": "KeyCheck",
+        "keychains": [
+          {
+            "result": "Success",
+            "conditions": [
+              {
+                "source": "data.RESPONSECODE",
+                "comparison": "EqualTo",
+                "value": "200"
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}
+```
+
+## Next Steps
+
+<CardGroup cols={3}>
+  <Card title="HTTP Requests" icon="globe" href="/blocks/http">
+    Learn about HTTP request configuration
+  </Card>
+  <Card title="Parsing" icon="filter" href="/blocks/parsing">
+    Extract data from responses
+  </Card>
+  <Card title="Control Flow" icon="code-branch" href="/blocks/control-flow">
+    Manage pipeline logic
+  </Card>
+</CardGroup>

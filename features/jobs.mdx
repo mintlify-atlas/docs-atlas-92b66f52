@@ -1,0 +1,324 @@
+---
+title: Jobs
+description: Execute pipelines at scale with multi-threaded job execution
+---
+
+Jobs allow you to run your pipeline against entire wordlists with configurable threading, proxy rotation, and real-time monitoring.
+
+## Overview
+
+A job executes your pipeline repeatedly for each line in a wordlist, using multiple threads for high-speed parallel processing. Jobs track progress, collect hits, and provide live statistics.
+
+## Creating a Job
+
+<Steps>
+  <Step title="Open Jobs panel">
+    Click the **Jobs** button in the bottom panel or sidebar.
+  </Step>
+
+  <Step title="Click New Job">
+    Choose the job type:
+    - **Config Job**: Run your current pipeline
+    - **Proxy Check**: Test a proxy list
+  </Step>
+
+  <Step title="Configure job settings">
+    Set job parameters:
+    - **Name**: Descriptive name for this job
+    - **Thread count**: Number of concurrent workers (default: 100)
+    - **Wordlist**: Path to your data file
+    - **Proxy list**: (Optional) Path to proxy file
+  </Step>
+
+  <Step title="Start the job">
+    Click **Start** to begin execution.
+  </Step>
+</Steps>
+
+## Job Types
+
+### Config Job
+
+Runs your pipeline configuration against a wordlist:
+
+```
+Pipeline: Login checker
+Wordlist: combos.txt (100,000 lines)
+Threads: 200
+Proxies: proxies.txt (Rotate mode)
+```
+
+Each line from the wordlist is processed through your pipeline blocks, with results classified by KeyCheck blocks.
+
+### Proxy Check Job
+
+Tests proxies for availability and speed:
+
+```
+Proxy List: proxies.txt (5,000 proxies)
+Check URL: https://api.ipify.org
+Threads: 500
+Type: HTTP/HTTPS
+```
+
+Filters out dead proxies and measures response time for each working proxy.
+
+## Thread Configuration
+
+### Choosing Thread Count
+
+Thread count determines how many requests run simultaneously:
+
+- **Low (10-50)**: Slower targets, rate-limited APIs
+- **Medium (50-200)**: Most use cases, balanced speed
+- **High (200-1000)**: Fast targets, proxy rotation
+- **Very High (1000+)**: Proxy checking, simple requests
+
+<Warning>
+Too many threads can trigger rate limiting or overload the target. Start with 100 threads and adjust based on CPM (checks per minute).
+</Warning>
+
+### Advanced Threading Options
+
+In your pipeline's **Runner Settings**:
+
+- **Start threads gradually**: Ramp up slowly to avoid initial burst
+- **Gradual delay**: Milliseconds between thread starts (default: 100ms)
+- **Automatic thread count**: Let IronBullet optimize threads
+- **Concurrent per proxy**: Limit requests per proxy simultaneously
+- **Lower threads on retry**: Reduce threads when retrying failed items
+
+## Monitoring Execution
+
+The Jobs panel displays real-time statistics:
+
+### Progress Bar
+
+```
+[████████████████░░░░] 78% complete
+15,600 / 20,000 processed
+```
+
+### Live Statistics
+
+| Metric | Value | Description |
+|--------|-------|-------------|
+| **CPM** | 1,245 | Checks per minute (current speed) |
+| **Hits** | 23 | Successful results |
+| **Fails** | 15,320 | Failed checks |
+| **Errors** | 12 | Network/parsing errors |
+| **Retries** | 45 | Items being retried |
+| **Active Threads** | 198/200 | Currently working threads |
+| **Elapsed** | 00:12:34 | Time since job started |
+| **Remaining** | ~00:03:28 | Estimated time to completion |
+
+### Job States
+
+- **Queued**: Job created but not started
+- **Running**: Currently executing
+- **Paused**: Temporarily stopped (can resume)
+- **Stopped**: Manually stopped by user
+- **Completed**: Finished processing all data
+
+## Job Controls
+
+### Pause/Resume
+
+Click **Pause** to temporarily stop execution:
+- Threads finish current items
+- Progress is saved
+- Click **Resume** to continue from where you left off
+
+### Stop
+
+Click **Stop** to terminate the job:
+- All threads are stopped immediately
+- Partial results are saved
+- Job cannot be resumed (must start new job)
+
+### Delete
+
+Remove a completed or stopped job:
+- Clears the job from the list
+- Results are removed (unless saved to file)
+
+## Results & Hits
+
+### Viewing Hits
+
+Click a job to view its hits in the **Hits Database** panel:
+
+```
+[HIT] admin:password123 | TOKEN=abc123 | SESSION=xyz789
+[HIT] user@example.com:test123 | BALANCE=500.00 | PREMIUM=true
+[HIT] demo:demo123 | API_KEY=key_abc123
+```
+
+Each hit shows:
+- **Data line**: Original wordlist entry
+- **Captures**: Variables marked as captures in your pipeline
+- **Proxy**: Proxy used (if applicable)
+
+### Exporting Results
+
+Jobs automatically save hits to files based on your **Output Settings**:
+
+**Output directory:** `results/`
+
+**File format:**
+```
+results/
+  job_20260303_143022_hits.txt
+  job_20260303_143022_fails.txt
+```
+
+**Custom output format:**
+```
+{data} | {captures}
+{USER}:{PASS} | Token: {TOKEN}
+```
+
+Configure in pipeline **Output Settings**:
+- **Save to file**: Enable/disable file output
+- **Output directory**: Where to save results
+- **Output format**: Custom template with variables
+- **Include response**: Save full HTTP responses
+
+## Data Source Options
+
+### File Path
+
+Load wordlist from a file:
+
+```
+Path: C:\Users\user\wordlists\combos.txt
+Format: username:password (one per line)
+```
+
+### Inline Data
+
+Paste data directly (useful for small tests):
+
+```
+test1:pass1
+test2:pass2
+test3:pass3
+```
+
+### Skip & Take
+
+Process a subset of data:
+
+- **Skip**: Skip first N lines (useful for resuming)
+- **Take**: Process only N lines (0 = all)
+
+Example: Skip 10,000, Take 5,000 → processes lines 10,001 to 15,000
+
+## Proxy Configuration
+
+### Per-Job Proxy Override
+
+Override your pipeline's proxy settings for a specific job:
+
+**Pipeline mode**: Use pipeline's proxy settings (default)
+
+**File mode**: Use a different proxy file for this job
+```
+Override file: proxies_premium.txt
+Mode: Rotate
+```
+
+**Group mode**: Use a named proxy group from pipeline
+```
+Group: residential_usa
+```
+
+<Info>
+This lets you run multiple jobs with the same pipeline but different proxy sources.
+</Info>
+
+## Multiple Jobs
+
+Run multiple jobs simultaneously:
+
+```
+Job 1: Netflix checker (100 threads, datacenter proxies)
+Job 2: Steam checker (50 threads, residential proxies)
+Job 3: Spotify checker (200 threads, proxyless)
+```
+
+Each job:
+- Has its own thread pool
+- Uses separate proxy sources
+- Tracks independent statistics
+- Saves results to separate files
+
+## Job History
+
+View past jobs in the Jobs panel:
+
+- Job name and creation time
+- Final statistics (hits, fails, CPM)
+- Completion time and duration
+- Click to view saved hits
+
+## Performance Optimization
+
+### Maximizing Speed
+
+1. **Increase threads**: More threads = higher CPM
+2. **Use proxies**: Avoid IP-based rate limiting
+3. **Optimize pipeline**: Remove unnecessary parsing blocks
+4. **Disable safe mode**: Faster execution (but errors aren't caught)
+5. **Reduce timeout**: Lower timeout for faster fails
+
+### Reducing Errors
+
+1. **Lower thread count**: Reduce pressure on target
+2. **Add gradual start**: Ramp up slowly
+3. **Increase timeout**: Give requests more time
+4. **Use better proxies**: Higher quality = fewer errors
+5. **Enable retries**: Retry failed items automatically
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="CPM is very low (< 100)">
+    - Target is slow or rate-limited
+    - Increase threads if target can handle it
+    - Check proxy quality (dead proxies slow things down)
+    - Reduce timeout to fail faster on dead endpoints
+  </Accordion>
+
+  <Accordion title="Many errors (> 10%)">
+    - Too many threads overwhelming target
+    - Bad proxies or proxy timeout too low
+    - Network issues or target blocking requests
+    - Enable retry logic in Runner Settings
+  </Accordion>
+
+  <Accordion title="No hits but data is valid">
+    - Test pipeline in Debug Mode first
+    - Verify KeyCheck conditions are correct
+    - Check that parsing blocks extract variables properly
+    - Ensure test data matches wordlist format
+  </Accordion>
+
+  <Accordion title="Job stuck at 0% or not starting">
+    - Check wordlist file path is correct
+    - Verify wordlist file is not empty
+    - Ensure sufficient memory for large wordlists
+    - Check logs for sidecar startup errors
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="CLI Mode" icon="terminal" href="/features/cli-mode">
+    Run jobs from the command line for automation
+  </Card>
+  <Card title="Export Code" icon="code" href="/features/export-code">
+    Generate standalone executables from your pipeline
+  </Card>
+</CardGroup>

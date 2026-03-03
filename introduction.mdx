@@ -1,0 +1,101 @@
+---
+title: 'Introduction'
+description: 'Visual pipeline builder for HTTP automation and credential checking'
+---
+
+## Welcome to IronBullet
+
+IronBullet is a powerful visual pipeline builder for HTTP automation and credential checking. Build complex automation workflows using a drag-and-drop block-based interface with 50+ specialized blocks.
+
+<CardGroup cols={2}>
+  <Card
+    title="Quick Start"
+    icon="rocket"
+    href="/quickstart"
+  >
+    Get up and running in minutes with your first pipeline
+  </Card>
+  <Card
+    title="Installation"
+    icon="download"
+    href="/installation"
+  >
+    Download and install IronBullet on Windows or Linux
+  </Card>
+  <Card
+    title="GitHub Repository"
+    icon="github"
+    href="https://github.com/ZeraTS/ironbullet"
+  >
+    View source code and latest releases
+  </Card>
+  <Card
+    title="Download Latest"
+    icon="file-arrow-down"
+    href="https://github.com/ZeraTS/ironbullet/releases"
+  >
+    Get the latest version (v0.2.3)
+  </Card>
+</CardGroup>
+
+## Key Features
+
+### Visual Block Editor
+Drag-and-drop interface for building automation pipelines without writing code. Configure blocks using the right panel and connect them to create complex workflows.
+
+### 50+ Specialized Blocks
+Access a comprehensive library of blocks organized into 8 categories:
+
+- **HTTP** - Requests with headers, cookies, and authentication
+- **Parsing** - JSON, Regex, CSS selector, and XPath extraction
+- **Functions** - String manipulation, lists, crypto, math, and time operations
+- **Control** - Conditionals, loops, variables, and delays
+- **Browser** - Selenium automation, screenshots, and JavaScript execution
+- **Protocols** - TCP, UDP, FTP, SSH, IMAP, and SMTP
+- **Bypass** - Captcha solving, Cloudflare bypass, and CSRF token handling
+- **Utilities** - Logging, scripting, and plugin support
+
+### Multi-threaded Execution
+Run pipelines with configurable thread pools for maximum performance. Handle large datasets efficiently with parallel execution.
+
+### Debug Mode
+Inspect requests and responses in real-time. Press F5 to debug your pipeline with test data before running against full datasets.
+
+### Variable System
+Flexible variable input system with three modes:
+- **RAW** - Use literal values
+- **EMBED** - Embed variables with `<variable>` or `{{variable}}` syntax
+- **VAR** - Reference variables directly
+
+### Proxy Support
+Built-in proxy rotation with ban detection and health checking to ensure reliable automation.
+
+### Export & Import
+- Export pipelines as standalone Rust code
+- Import OpenBullet configs (.svb, .opk, .loliScript)
+- Plugin system with hot-loading support
+
+## What You Can Build
+
+IronBullet is designed for HTTP automation workflows including:
+
+- Credential checking and validation
+- API testing and automation
+- Web scraping and data extraction
+- Multi-step authentication flows
+- Protocol-level testing (TCP, UDP, FTP, SSH, IMAP, SMTP)
+- Browser automation with Selenium
+- Captcha solving and bypass techniques
+
+## Technology Stack
+
+IronBullet is built with:
+
+- **Backend**: Rust (Tokio async runtime, reqwest HTTP client)
+- **Frontend**: SvelteKit with Vite and TailwindCSS
+- **WebView**: WebView2 (Windows) / WebKitGTK (Linux)
+- **Sidecar**: Go-based reqflow-sidecar for AzureTLS HTTP requests
+
+<Note>
+IronBullet requires WebView2 on Windows or WebKitGTK on Linux. See the [Installation](/installation) guide for details.
+</Note>

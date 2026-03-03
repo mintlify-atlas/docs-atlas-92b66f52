@@ -1,0 +1,377 @@
+---
+title: 'Custom Blocks'
+description: 'Extend the block system and add new block types'
+icon: 'puzzle-piece'
+---
+
+## Block Architecture
+
+IronBullet's pipeline execution is built on a modular block system. Each block:
+
+1. Has a **type** (enum variant in `BlockType`)
+2. Stores **settings** (enum variant in `BlockSettings`)
+3. Implements an **execution method** in `ExecutionContext`
+
+Understanding this architecture lets you add custom functionality without forking the core.
+
+## Anatomy of a Block
+
+### Step 1: Define the block type
+
+```rust src/pipeline/block/mod.rs
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum BlockType {
+    HttpRequest,
+    ParseJSON,
+    KeyCheck,
+    // ... existing blocks
+    
+    // Add your custom block
+    MyCustomBlock,
+}
+```
+
+### Step 2: Define the settings struct
+
+Create a new file `src/pipeline/block/settings_mycustom.rs`:
+
+```rust settings_mycustom.rs
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MyCustomBlockSettings {
+    pub input_var: String,
+    pub output_var: String,
+    pub operation: String,
+    #[serde(default)]
+    pub capture: bool,
+}
+
+impl Default for MyCustomBlockSettings {
+    fn default() -> Self {
+        Self {
+            input_var: "SOURCE".into(),
+            output_var: "result".into(),
+            operation: "transform".into(),
+            capture: false,
+        }
+    }
+}
+```
+
+Register it in `mod.rs`:
+
+```rust src/pipeline/block/mod.rs
+mod settings_mycustom;
+pub use settings_mycustom::*;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type")]
+pub enum BlockSettings {
+    HttpRequest(HttpRequestSettings),
+    // ... existing variants
+    
+    MyCustomBlock(MyCustomBlockSettings),
+}
+```
+
+### Step 3: Implement the execution logic
+
+Add the handler in `src/pipeline/engine/mod.rs`:
+
+```rust src/pipeline/engine/mod.rs
+impl ExecutionContext {
+    async fn execute_block(
+        &mut self,
+        block: &Block,
+        sidecar_tx: &mpsc::Sender<(SidecarRequest, oneshot::Sender<SidecarResponse>)>,
+    ) -> crate::error::Result<()> {
+        match &block.settings {
+            BlockSettings::HttpRequest(s) => self.execute_http_request(block, s, sidecar_tx).await,
+            // ... existing handlers
+            
+            BlockSettings::MyCustomBlock(s) => self.execute_my_custom_block(s),
+        }
+    }
+    
+    fn execute_my_custom_block(&mut self, settings: &MyCustomBlockSettings) -> crate::error::Result<()> {
+        // 1. Read input variable
+        let input = self.variables.get(&settings.input_var)
+            .unwrap_or_default();
+        
+        // 2. Perform custom operation
+        let output = match settings.operation.as_str() {
+            "reverse" => input.chars().rev().collect(),
+            "uppercase" => input.to_uppercase(),
+            _ => input,
+        };
+        
+        // 3. Store result
+        self.variables.set_user(&settings.output_var, output, settings.capture);
+        
+        Ok(())
+    }
+}
+```
+
+### Step 4: Add UI metadata
+
+Update `BlockType` helper methods:
+
+```rust src/pipeline/block/mod.rs
+impl BlockType {
+    pub fn default_label(&self) -> &'static str {
+        match self {
+            // ... existing labels
+            Self::MyCustomBlock => "My Custom Block",
+        }
+    }
+    
+    pub fn category(&self) -> &'static str {
+        match self {
+            // ... existing categories
+            Self::MyCustomBlock => "Functions",
+        }
+    }
+    
+    pub fn color(&self) -> &'static str {
+        match self.category() {
+            "Functions" => "#c586c0",
+            // ... existing colors
+        }
+    }
+    
+    pub fn default_settings(&self) -> BlockSettings {
+        match self {
+            // ... existing defaults
+            Self::MyCustomBlock => BlockSettings::MyCustomBlock(MyCustomBlockSettings::default()),
+        }
+    }
+}
+```
+
+## Real Example: Plugin Block
+
+Let's examine the `Plugin` block to see these concepts in action:
+
+### Settings Definition
+
+```rust src/pipeline/block/settings_data.rs
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PluginBlockSettings {
+    pub plugin_name: String,
+    pub function: String,
+    #[serde(default)]
+    pub args: Vec<String>,
+    pub output_var: String,
+    #[serde(default)]
+    pub capture: bool,
+}
+```
+
+### Execution Logic
+
+```rust src/pipeline/engine/data.rs
+impl ExecutionContext {
+    pub(super) fn execute_plugin_block(&mut self, settings: &PluginBlockSettings) -> crate::error::Result<()> {
+        let pm = self.plugin_manager.as_ref()
+            .ok_or_else(|| AppError::Pipeline("No plugin manager".into()))?;
+        
+        // Interpolate arguments with pipeline variables
+        let args: Vec<String> = settings.args.iter()
+            .map(|a| self.variables.interpolate(a))
+            .collect();
+        
+        // Call plugin function
+        let result = pm.call_function(&settings.plugin_name, &settings.function, &args)?;
+        
+        // Store result
+        self.variables.set_user(&settings.output_var, result, settings.capture);
+        
+        Ok(())
+    }
+}
+```
+
+## Advanced Patterns
+
+### 1. Nested Block Execution
+
+For control-flow blocks (IfElse, Loop, Group), recursively call `execute_blocks`:
+
+```rust src/pipeline/engine/mod.rs
+BlockSettings::IfElse(s) => {
+    let condition = self.evaluate_condition(&s.condition);
+    let branch = if condition { &s.true_blocks } else { &s.false_blocks };
+    
+    // Recursively execute nested blocks
+    self.execute_blocks(branch, sidecar_tx).await
+}
+```
+
+### 2. Async Operations
+
+For I/O-bound blocks, use async/await:
+
+```rust
+async fn execute_my_async_block(&mut self, settings: &MySettings) -> Result<()> {
+    let url = self.variables.interpolate(&settings.url);
+    
+    // Async HTTP request
+    let response = reqwest::get(&url).await?;
+    let body = response.text().await?;
+    
+    self.variables.set_data(&settings.output_var, body);
+    Ok(())
+}
+```
+
+### 3. Sidecar Integration
+
+For operations requiring the Go sidecar (TLS fingerprinting, browser automation):
+
+```rust
+let req = SidecarRequest {
+    id: Uuid::new_v4().to_string(),
+    action: "custom_action".into(),
+    session: self.session_id.clone(),
+    // ... custom fields
+    ..Default::default()
+};
+
+let (resp_tx, resp_rx) = oneshot::channel();
+sidecar_tx.send((req, resp_tx)).await?;
+let resp = resp_rx.await?;
+```
+
+## Block Categories
+
+Organize blocks by category for better UI grouping:
+
+| Category | Color | Purpose | Examples |
+|----------|-------|---------|----------|
+| **Requests** | `#0078d4` | Network I/O | HttpRequest, TcpRequest |
+| **Parsing** | `#4ec9b0` | Extract data | ParseJSON, ParseRegex |
+| **Checks** | `#d7ba7d` | Validation | KeyCheck |
+| **Functions** | `#c586c0` | Transform data | StringFunction, CryptoFunction |
+| **Control** | `#dcdcaa` | Flow control | IfElse, Loop |
+| **Browser** | `#e06c75` | Automation | NavigateTo, ClickElement |
+| **Sensors** | `#2dd4bf` | Anti-bot | DataDomeSensor, AkamaiV3 |
+
+## Code Generation Support
+
+To make your block exportable to Rust code, add codegen logic:
+
+### 1. Import scanning
+
+```rust src/export/rust_codegen/mod.rs
+fn scan_blocks_for_imports(blocks: &[Block], flags: &mut ImportFlags) {
+    for block in blocks {
+        match &block.settings {
+            BlockSettings::MyCustomBlock(_) => {
+                flags.my_custom_crate = true;
+            }
+            // ... existing scans
+        }
+    }
+}
+```
+
+### 2. Code generation
+
+```rust src/export/rust_codegen/block_codegen.rs
+pub(super) fn generate_block_code(block: &Block, indent: usize, vars: &mut VarTracker) -> String {
+    match &block.settings {
+        BlockSettings::MyCustomBlock(s) => {
+            let pad = "    ".repeat(indent);
+            let input = var_name(&s.input_var);
+            let output = var_name(&s.output_var);
+            
+            format!(
+                "{}let {} = my_crate::transform(&{}, \"{}\");\n",
+                pad, output, input, s.operation
+            )
+        }
+        // ... existing generators
+    }
+}
+```
+
+## Testing Your Block
+
+### Unit Test
+
+```rust
+#[cfg(test)]
+mod tests {
+    use super::*;
+    
+    #[test]
+    fn test_my_custom_block() {
+        let mut ctx = ExecutionContext::new("test-session".into());
+        ctx.variables.set_data("SOURCE", "hello".into());
+        
+        let settings = MyCustomBlockSettings {
+            input_var: "SOURCE".into(),
+            output_var: "result".into(),
+            operation: "reverse".into(),
+            capture: false,
+        };
+        
+        ctx.execute_my_custom_block(&settings).unwrap();
+        
+        assert_eq!(ctx.variables.get("result"), Some(&"olleh".to_string()));
+    }
+}
+```
+
+### Integration Test
+
+```rust
+#[tokio::test]
+async fn test_custom_block_in_pipeline() {
+    let pipeline = Pipeline {
+        blocks: vec![
+            Block {
+                id: Uuid::new_v4(),
+                block_type: BlockType::MyCustomBlock,
+                label: "Test".into(),
+                disabled: false,
+                safe_mode: false,
+                settings: BlockSettings::MyCustomBlock(MyCustomBlockSettings::default()),
+            }
+        ],
+        // ... other fields
+    };
+    
+    let (tx, _rx) = mpsc::channel(1);
+    let mut ctx = ExecutionContext::new("test".into());
+    
+    ctx.execute_blocks(&pipeline.blocks, &tx).await.unwrap();
+}
+```
+
+## Best Practices
+
+<Tip>
+**Variable naming**: Use `snake_case` for output variables, UPPERCASE for data sources (SOURCE, RESPONSE).
+</Tip>
+
+<Warning>
+**Error handling**: Always return `crate::error::Result<()>`. Use `AppError::Pipeline(msg)` for domain errors.
+</Warning>
+
+<Note>
+**State management**: Store temporary state in `ExecutionContext`, persistent state in `VariableStore`.
+</Note>
+
+## Contributing Blocks
+
+If your custom block would benefit the community, submit a PR:
+
+1. Add comprehensive tests
+2. Document settings in code comments
+3. Add UI screenshots (if applicable)
+4. Update the block gallery in docs
+
+See [CONTRIBUTING.md](https://github.com/openbullet/ironbullet) for guidelines.

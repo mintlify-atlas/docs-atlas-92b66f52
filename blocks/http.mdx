@@ -1,0 +1,260 @@
+---
+title: 'HTTP Request Block'
+description: 'Make HTTP/HTTPS requests with advanced TLS fingerprinting and proxy support'
+---
+
+## Overview
+
+The `HttpRequest` block is the primary method for making HTTP/HTTPS requests in IronBullet pipelines. It supports advanced features like:
+
+- JA3 TLS fingerprinting
+- HTTP/2 fingerprinting
+- Custom cipher suites
+- Browser profile emulation
+- Automatic cookie management
+- Proxy support
+- Custom headers and authentication
+
+## Settings
+
+<ParamField path="method" type="string" default="GET" required>
+  HTTP method: `GET`, `POST`, `PUT`, `DELETE`, `PATCH`, `HEAD`, `OPTIONS`
+  
+  Example: `"POST"`
+</ParamField>
+
+<ParamField path="url" type="string" required>
+  Target URL with optional variable interpolation
+  
+  Example: `"https://api.example.com/user/<input.USER>"`
+</ParamField>
+
+<ParamField path="headers" type="array">
+  Array of `[name, value]` header tuples
+  
+  ```json
+  [
+    ["Content-Type", "application/json"],
+    ["Authorization", "Bearer <data.TOKEN>"]
+  ]
+  ```
+</ParamField>
+
+<ParamField path="body" type="string">
+  Request body with variable interpolation
+  
+  Example: `"{\"email\":\"<input.USER>\",\"password\":\"<input.PASS>\"}"`
+</ParamField>
+
+<ParamField path="body_type" type="BodyType" default="None">
+  How to encode the request body:
+  - `None`: No body
+  - `Standard`: URL-encoded form data
+  - `Raw`: Send body as-is
+  - `Multipart`: Multipart form data
+  - `BasicAuth`: Use basic authentication
+</ParamField>
+
+<ParamField path="content_type" type="string" default="application/x-www-form-urlencoded">
+  Content-Type header value (only used with certain body types)
+</ParamField>
+
+<ParamField path="follow_redirects" type="boolean" default="true">
+  Automatically follow HTTP redirects
+</ParamField>
+
+<ParamField path="max_redirects" type="number" default="8">
+  Maximum number of redirects to follow
+</ParamField>
+
+<ParamField path="timeout_ms" type="number" default="10000">
+  Request timeout in milliseconds
+</ParamField>
+
+<ParamField path="auto_redirect" type="boolean" default="true">
+  Enable automatic redirect handling
+</ParamField>
+
+<ParamField path="basic_auth" type="tuple" optional>
+  Basic authentication credentials as `[username, password]`
+  
+  Example: `["admin", "password123"]`
+</ParamField>
+
+<ParamField path="http_version" type="string" default="HTTP/1.1">
+  HTTP version to use: `HTTP/1.1`, `HTTP/2`, or `HTTP/3`
+</ParamField>
+
+<ParamField path="response_var" type="string" default="SOURCE">
+  Variable name prefix for response storage:
+  - Response body → `data.{response_var}`
+  - Headers → `data.{response_var}.HEADERS`
+  - Cookies → `data.{response_var}.COOKIES`
+  - Status → `data.{response_var}.STATUS`
+  - URL → `data.{response_var}.URL`
+</ParamField>
+
+<ParamField path="custom_cookies" type="string">
+  Custom cookies to send (one per line: `name=value`)
+  
+  Example:
+  ```
+  session=abc123
+  csrf=xyz789
+  ```
+</ParamField>
+
+<ParamField path="ssl_verify" type="boolean" default="true">
+  Verify TLS certificates. Set to `false` for self-signed certs (not recommended for production)
+</ParamField>
+
+<ParamField path="cipher_suites" type="string">
+  Dash-separated IANA cipher suite IDs to override browser defaults
+  
+  Example: `"4865-4866-4867-49195-49199-49196-49200-52393-52392"`
+</ParamField>
+
+<ParamField path="tls_client" type="TlsClient" default="RustTLS">
+  Which TLS/HTTP client to use:
+  - `RustTLS`: Native Rust reqwest client (faster, standard HTTPS)
+  - `AzureTLS`: Go sidecar with JA3/HTTP2 fingerprinting support
+</ParamField>
+
+<ParamField path="browser_profile" type="string">
+  Browser profile for AzureTLS fingerprinting: `chrome`, `firefox`, `safari`, `edge`
+  
+  Leave empty to inherit from pipeline-level settings
+</ParamField>
+
+<ParamField path="ja3_override" type="string">
+  Per-block JA3 fingerprint override (AzureTLS only)
+  
+  Format: `"TLSVersion,Ciphers,Extensions,EllipticCurves,EllipticCurvePointFormats"`
+</ParamField>
+
+<ParamField path="http2fp_override" type="string">
+  Per-block HTTP/2 fingerprint override (AzureTLS only)
+</ParamField>
+
+## Examples
+
+### Simple GET Request
+
+```json
+{
+  "block_type": "HttpRequest",
+  "label": "Fetch User Profile",
+  "settings": {
+    "type": "HttpRequest",
+    "method": "GET",
+    "url": "https://api.example.com/users/<input.USER>",
+    "headers": [
+      ["Accept", "application/json"]
+    ]
+  }
+}
+```
+
+### POST with JSON Body
+
+```json
+{
+  "block_type": "HttpRequest",
+  "label": "Login Request",
+  "settings": {
+    "type": "HttpRequest",
+    "method": "POST",
+    "url": "https://auth.example.com/login",
+    "headers": [
+      ["Content-Type", "application/json"],
+      ["Accept", "application/json"]
+    ],
+    "body": "{\"email\":\"<input.USER>\",\"password\":\"<input.PASS>\"}",
+    "body_type": "Raw",
+    "content_type": "application/json"
+  }
+}
+```
+
+### Request with Custom Cookies
+
+```json
+{
+  "block_type": "HttpRequest",
+  "label": "Authenticated Request",
+  "settings": {
+    "type": "HttpRequest",
+    "method": "GET",
+    "url": "https://app.example.com/dashboard",
+    "custom_cookies": "session=<data.SESSION_ID>\ncsrf=<data.CSRF_TOKEN>"
+  }
+}
+```
+
+### Request with JA3 Fingerprinting
+
+```json
+{
+  "block_type": "HttpRequest",
+  "label": "Fingerprinted Request",
+  "settings": {
+    "type": "HttpRequest",
+    "method": "GET",
+    "url": "https://protected-site.com/api",
+    "tls_client": "AzureTLS",
+    "browser_profile": "chrome",
+    "http_version": "HTTP/2"
+  }
+}
+```
+
+### Request with Basic Auth
+
+```json
+{
+  "block_type": "HttpRequest",
+  "label": "API Request",
+  "settings": {
+    "type": "HttpRequest",
+    "method": "GET",
+    "url": "https://api.example.com/data",
+    "basic_auth": ["<input.API_USER>", "<input.API_KEY>"]
+  }
+}
+```
+
+## Response Variables
+
+After execution, the block populates these variables (assuming default `response_var: "SOURCE"`):
+
+- `data.SOURCE`: Response body as text
+- `data.RESPONSECODE`: HTTP status code (e.g., `"200"`, `"404"`)
+- `data.HEADERS`: Response headers as string
+- `data.COOKIES`: Response cookies
+- `data.ADDRESS`: Final URL after redirects
+
+## TLS Fingerprinting
+
+IronBullet supports two TLS client modes:
+
+### RustTLS (Default)
+- Native Rust implementation
+- Faster for standard HTTPS
+- No fingerprinting capabilities
+- Best for internal APIs and simple requests
+
+### AzureTLS
+- Go sidecar process with azuretls library
+- Supports JA3 TLS fingerprinting
+- Supports HTTP/2 fingerprinting
+- Custom cipher suites
+- Browser profile emulation
+- Best for bypassing bot detection
+
+## Best Practices
+
+1. **Use variable interpolation** for dynamic values instead of hardcoding
+2. **Set appropriate timeouts** to prevent hanging on slow servers
+3. **Enable SSL verification** in production (disable only for testing)
+4. **Use custom response variables** when making multiple requests to avoid overwriting `data.SOURCE`
+5. **Choose the right TLS client**: Use RustTLS for speed, AzureTLS for fingerprinting

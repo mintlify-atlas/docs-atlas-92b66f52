@@ -1,0 +1,417 @@
+---
+title: "Variables"
+description: "Understanding IronBullet's variable system and interpolation syntax"
+icon: "brackets-curly"
+---
+
+## Variable System Overview
+
+IronBullet uses a scoped variable system to store and pass data between blocks. Variables can hold strings, numbers, lists, booleans, and are accessed using special syntax for interpolation.
+
+<Note>
+Variables are the glue that connects blocks together - they store HTTP responses, parsed data, and intermediate values as your pipeline executes.
+</Note>
+
+## Variable Scopes
+
+From `src/pipeline/variable.rs:59-67`:
+
+```rust
+pub struct VariableStore {
+    pub input: HashMap<String, String>,      // Input data slices
+    pub data: HashMap<String, String>,       // Response data & metadata
+    pub globals: HashMap<String, String>,    // Global/startup variables
+    pub user_vars: HashMap<String, Variable>,// User-defined variables
+}
+```
+
+### Scope Types
+
+<CardGroup cols={2}>
+  <Card title="input.*" icon="arrow-right-to-bracket" color="blue">
+    Data from the current wordlist line. Populated by parsing according to `data_settings`.
+    
+    **Examples:**
+    - `input.USER`
+    - `input.PASS`
+    - `input.EMAIL`
+  </Card>
+
+  <Card title="data.*" icon="database" color="green">
+    Response data and metadata from HTTP blocks.
+    
+    **Auto-populated:**
+    - `data.SOURCE` - Response body
+    - `data.RESPONSECODE` - HTTP status code
+    - `data.HEADERS` - Response headers
+    - `data.COOKIES` - Response cookies
+    - `data.ADDRESS` - Final URL after redirects
+  </Card>
+
+  <Card title="globals.*" icon="globe" color="purple">
+    Variables set in startup blocks, accessible to all data entries.
+    
+    **Example:**
+    - `globals.API_KEY`
+    - `globals.SESSION_ID`
+  </Card>
+
+  <Card title="User Variables" icon="user" color="orange">
+    Custom variables created by Parse blocks or SetVariable.
+    
+    **Examples:**
+    - `TOKEN`
+    - `CSRF`
+    - `USER_ID`
+  </Card>
+</CardGroup>
+
+## Variable Values
+
+From `src/pipeline/variable.rs:13-41`:
+
+```rust
+pub enum VariableValue {
+    String(String),
+    List(Vec<String>),
+    Int(i64),
+    Float(f64),
+    Bool(bool),
+}
+```
+
+Variables can hold different types:
+- **String** - Text values (most common)
+- **List** - Arrays of strings
+- **Int** - Integer numbers
+- **Float** - Decimal numbers
+- **Bool** - true/false values
+
+## Interpolation Syntax
+
+IronBullet supports two interpolation syntaxes:
+
+### Angle Bracket Syntax: `<variable>`
+
+The primary syntax for embedding variables in strings. From `src/pipeline/variable.rs:103-142`:
+
+```text
+<input.USER>          → Replaced with username from wordlist
+<input.PASS>          → Replaced with password from wordlist
+<data.RESPONSECODE>   → Replaced with HTTP status code
+<TOKEN>               → Replaced with value of TOKEN variable
+<globals.API_KEY>     → Replaced with global API key
+```
+
+**Example usage:**
+```json
+{
+  "block_type": "HttpRequest",
+  "settings": {
+    "url": "https://api.example.com/user/<input.USER>",
+    "headers": [
+      ["Authorization", "Bearer <TOKEN>"]
+    ],
+    "body": "{\"email\":\"<input.EMAIL>\",\"password\":\"<input.PASS>\"}"
+  }
+}
+```
+
+### Curly Brace Syntax: `{{variable}}`
+
+<Warning>
+The `{{variable}}` syntax is mentioned in some contexts but the primary implementation uses `<variable>` syntax. Always prefer angle brackets for consistency.
+</Warning>
+
+## Random Data Functions
+
+IronBullet includes built-in random data generators accessible via the `random.*` prefix. From `src/pipeline/variable.rs:182-217`:
+
+```rust
+fn resolve_random_function(name: &str) -> Option<String> {
+    match name.strip_prefix("random.")? {
+        "email" => Some(random_email()),
+        "uuid" => Some(random_uuid()),
+        "phone" => Some(random_phone()),
+        "string" => Some(random_string(16, "alphanumeric", "")),
+        "number" => Some(random_number(0, 100, false)),
+        "name.first" => Some(random_first_name()),
+        "name.last" => Some(random_last_name()),
+        "name.full" => Some(random_full_name()),
+        "address.street" => Some(random_street_address()),
+        "address.city" => Some(random_city()),
+        "address.state" => Some(random_state()),
+        "address.zip" => Some(random_zip()),
+        // Parameterized forms
+        "string.32" => Some(random_string(32, "alphanumeric", "")),
+        "number.1.100" => Some(random_number(1, 100, false)),
+    }
+}
+```
+
+### Available Random Functions
+
+<AccordionGroup>
+  <Accordion title="Basic Generators">
+    | Function | Output Example | Description |
+    |----------|----------------|-------------|
+    | `<random.email>` | `user@example.com` | Random email address |
+    | `<random.uuid>` | `550e8400-e29b-41d4-a716-446655440000` | Random UUID v4 |
+    | `<random.phone>` | `+1-555-0123` | Random phone number |
+    | `<random.string>` | `aB3xK9mP2qR7` | 16-char alphanumeric |
+    | `<random.number>` | `42` | Number between 0-100 |
+  </Accordion>
+
+  <Accordion title="Names">
+    | Function | Output Example |
+    |----------|----------------|
+    | `<random.name.first>` | `John` |
+    | `<random.name.last>` | `Smith` |
+    | `<random.name.full>` | `John Smith` |
+  </Accordion>
+
+  <Accordion title="Addresses">
+    | Function | Output Example |
+    |----------|----------------|
+    | `<random.address.street>` | `123 Main Street` |
+    | `<random.address.city>` | `Springfield` |
+    | `<random.address.state>` | `California` |
+    | `<random.address.zip>` | `90210` |
+  </Accordion>
+
+  <Accordion title="Parameterized">
+    | Function | Description |
+    |----------|-------------|
+    | `<random.string.32>` | 32-character random string |
+    | `<random.string.64>` | 64-character random string |
+    | `<random.number.1.1000>` | Random number 1-1000 |
+    | `<random.number.100.999>` | Random number 100-999 |
+  </Accordion>
+</AccordionGroup>
+
+## Capturing Variables
+
+When you parse data and want to include it in the output, mark it as a **capture**. From configs:
+
+```json
+{
+  "block_type": "ParseJSON",
+  "settings": {
+    "json_path": "user.premium",
+    "output_var": "PREMIUM",
+    "capture": true  // ← This variable will be included in output
+  }
+}
+```
+
+Captured variables appear in your results file:
+```
+user@example.com:password123 | PREMIUM=true | CREDITS=500
+```
+
+From `src/pipeline/variable.rs:155-161`:
+```rust
+pub fn captures(&self) -> HashMap<String, String> {
+    self.user_vars.iter()
+        .filter(|(_, v)| v.is_capture)
+        .map(|(k, v)| (k.clone(), v.value.as_str()))
+        .collect()
+}
+```
+
+## Auto-Populated Variables
+
+After every HTTP request block, these variables are automatically set:
+
+| Variable | Description | Example |
+|----------|-------------|----------|
+| `data.SOURCE` | Response body | `{"status":"ok"}` |
+| `data.RESPONSECODE` | HTTP status code | `200` |
+| `data.HEADERS` | Response headers (JSON) | `{"content-type":"application/json"}` |
+| `data.COOKIES` | Response cookies | `session=abc123` |
+| `data.ADDRESS` | Final URL after redirects | `https://example.com/dashboard` |
+
+<Tip>
+You can customize the prefix by setting `response_var` in HttpRequest settings. For example, `response_var: "LOGIN"` stores the response in `LOGIN`, `LOGIN.STATUS`, etc.
+</Tip>
+
+## Variable Resolution
+
+From `src/pipeline/variable.rs:74-85`, variables are resolved with this priority:
+
+1. **Check for scope prefix** (`input.`, `data.`, `globals.`)
+2. **Resolve from that scope**
+3. **If no prefix, check user variables**
+4. **If not found, leave as-is** (unresolved variables remain `<VARNAME>`)
+
+```rust
+pub fn get(&self, key: &str) -> Option<String> {
+    if let Some(rest) = key.strip_prefix("input.") {
+        self.input.get(rest).cloned()
+    } else if let Some(rest) = key.strip_prefix("data.") {
+        self.data.get(rest).cloned()
+    } else if let Some(rest) = key.strip_prefix("globals.") {
+        self.globals.get(rest).cloned()
+    } else {
+        self.user_vars.get(key).map(|v| v.value.as_str())
+    }
+}
+```
+
+## Common Patterns
+
+<AccordionGroup>
+  <Accordion title="Using Input Data in Requests">
+    ```json
+    {
+      "block_type": "HttpRequest",
+      "settings": {
+        "method": "POST",
+        "url": "https://api.example.com/login",
+        "body": "username=<input.USER>&password=<input.PASS>"
+      }
+    }
+    ```
+    If your wordlist line is `john@example.com:secretpass`, this becomes:
+    ```
+    username=john@example.com&password=secretpass
+    ```
+  </Accordion>
+
+  <Accordion title="Chaining Parsed Values">
+    ```json
+    [
+      {
+        "block_type": "ParseJSON",
+        "settings": {
+          "json_path": "token",
+          "output_var": "AUTH_TOKEN",
+          "capture": false
+        }
+      },
+      {
+        "block_type": "HttpRequest",
+        "settings": {
+          "url": "https://api.example.com/user",
+          "headers": [["Authorization", "Bearer <AUTH_TOKEN>"]]
+        }
+      }
+    ]
+    ```
+  </Accordion>
+
+  <Accordion title="Using Random Data">
+    ```json
+    {
+      "block_type": "HttpRequest",
+      "settings": {
+        "body": {
+          "first_name": "<random.name.first>",
+          "last_name": "<random.name.last>",
+          "email": "<random.email>",
+          "phone": "<random.phone>",
+          "session_id": "<random.uuid>"
+        }
+      }
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Checking Response Code">
+    ```json
+    {
+      "block_type": "KeyCheck",
+      "settings": {
+        "keychains": [
+          {
+            "result": "Success",
+            "conditions": [{
+              "source": "data.RESPONSECODE",
+              "comparison": "EqualTo",
+              "value": "200"
+            }]
+          },
+          {
+            "result": "Ban",
+            "conditions": [{
+              "source": "data.RESPONSECODE",
+              "comparison": "EqualTo",
+              "value": "429"
+            }]
+          }
+        ]
+      }
+    }
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Variable Snapshots
+
+You can see all variables at any point using the snapshot feature (from `src/pipeline/variable.rs:163-179`):
+
+```rust
+pub fn snapshot(&self) -> HashMap<String, String> {
+    let mut map = HashMap::new();
+    for (k, v) in &self.input {
+        map.insert(format!("input.{}", k), v.clone());
+    }
+    for (k, v) in &self.data {
+        map.insert(format!("data.{}", k), v.clone());
+    }
+    for (k, v) in &self.globals {
+        map.insert(format!("globals.{}", k), v.clone());
+    }
+    for (k, v) in &self.user_vars {
+        map.insert(k.clone(), v.value.as_str());
+    }
+    map
+}
+```
+
+This is used in `BlockResult.variables_after` to show variable state after each block execution.
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Naming" icon="tag">
+    - Use UPPERCASE for variable names
+    - Be descriptive: `AUTH_TOKEN` not `T1`
+    - Use underscores: `USER_ID` not `USERID`
+  </Card>
+
+  <Card title="Captures" icon="bookmark">
+    - Only mark final output as captures
+    - Don't capture intermediate parsing
+    - Captures increase output file size
+  </Card>
+
+  <Card title="Scoping" icon="layer-group">
+    - Use `input.*` for wordlist data
+    - Use `data.*` for HTTP responses
+    - Use `globals.*` for startup values
+    - User vars for parsed intermediate data
+  </Card>
+
+  <Card title="Debugging" icon="bug">
+    - Use Log blocks to print variables
+    - Check BlockResult.variables_after
+    - Unresolved variables stay as `<NAME>`
+  </Card>
+</CardGroup>
+
+## Related Concepts
+
+<CardGroup cols={3}>
+  <Card title="Blocks" icon="cube" href="/concepts/blocks">
+    How blocks create and use variables
+  </Card>
+  
+  <Card title="Data Input" icon="database" href="/concepts/data-input">
+    How input.* variables are populated
+  </Card>
+  
+  <Card title="Pipelines" icon="diagram-project" href="/concepts/pipelines">
+    Output settings and capture formatting
+  </Card>
+</CardGroup>

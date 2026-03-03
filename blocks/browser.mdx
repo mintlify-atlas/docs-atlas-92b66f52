@@ -1,0 +1,377 @@
+---
+title: 'Browser Automation Blocks'
+description: 'Control headless browsers for dynamic content and JavaScript-heavy sites'
+---
+
+## Overview
+
+Browser automation blocks use headless browsers (Chromium, Firefox, WebKit) to interact with JavaScript-heavy websites, handle dynamic content, and perform actions like clicking and typing.
+
+## BrowserOpen
+
+Launch a browser instance.
+
+### Settings
+
+<ParamField path="headless" type="boolean" default="true">
+  Run browser in headless mode (no visible window)
+</ParamField>
+
+<ParamField path="browser_type" type="string" default="chromium">
+  Browser engine to use: `chromium`, `firefox`, `webkit`
+</ParamField>
+
+<ParamField path="proxy" type="string">
+  Proxy URL in format: `http://host:port` or `socks5://host:port`
+</ParamField>
+
+<ParamField path="extra_args" type="string">
+  Additional browser launch arguments (space-separated)
+</ParamField>
+
+### Example
+
+```json
+{
+  "block_type": "BrowserOpen",
+  "label": "Launch Browser",
+  "settings": {
+    "type": "BrowserOpen",
+    "headless": true,
+    "browser_type": "chromium",
+    "extra_args": "--disable-blink-features=AutomationControlled"
+  }
+}
+```
+
+## NavigateTo
+
+Navigate to a URL in the browser.
+
+### Settings
+
+<ParamField path="url" type="string" required>
+  URL to navigate to (supports variable interpolation)
+</ParamField>
+
+<ParamField path="wait_until" type="string" default="load">
+  Navigation completion event:
+  - `load` - Wait for load event
+  - `domcontentloaded` - Wait for DOMContentLoaded
+  - `networkidle` - Wait for network idle
+</ParamField>
+
+<ParamField path="timeout_ms" type="number" default="30000">
+  Navigation timeout in milliseconds
+</ParamField>
+
+<ParamField path="custom_cookies" type="string">
+  Cookies to set before navigation (one per line: `name=value`)
+</ParamField>
+
+### Example
+
+```json
+{
+  "block_type": "NavigateTo",
+  "label": "Open Login Page",
+  "settings": {
+    "type": "NavigateTo",
+    "url": "https://example.com/login",
+    "wait_until": "networkidle",
+    "timeout_ms": 30000
+  }
+}
+```
+
+## ClickElement
+
+Click an element on the page.
+
+### Settings
+
+<ParamField path="selector" type="string" required>
+  CSS selector for element to click
+</ParamField>
+
+<ParamField path="wait_for_navigation" type="boolean" default="false">
+  Wait for navigation after clicking (e.g., form submission)
+</ParamField>
+
+<ParamField path="timeout_ms" type="number" default="5000">
+  Timeout for element to appear
+</ParamField>
+
+### Example
+
+```json
+{
+  "block_type": "ClickElement",
+  "label": "Click Login Button",
+  "settings": {
+    "type": "ClickElement",
+    "selector": "button[type='submit']",
+    "wait_for_navigation": true,
+    "timeout_ms": 5000
+  }
+}
+```
+
+## TypeText
+
+Type text into an input field.
+
+### Settings
+
+<ParamField path="selector" type="string" required>
+  CSS selector for input element
+</ParamField>
+
+<ParamField path="text" type="string" required>
+  Text to type (supports variable interpolation)
+</ParamField>
+
+<ParamField path="clear_first" type="boolean" default="true">
+  Clear existing text before typing
+</ParamField>
+
+<ParamField path="delay_ms" type="number" default="50">
+  Delay between keystrokes in milliseconds (simulates human typing)
+</ParamField>
+
+### Example
+
+```json
+{
+  "block_type": "TypeText",
+  "label": "Enter Username",
+  "settings": {
+    "type": "TypeText",
+    "selector": "input[name='username']",
+    "text": "<input.USER>",
+    "clear_first": true,
+    "delay_ms": 50
+  }
+}
+```
+
+## WaitForElement
+
+Wait for an element to appear/disappear.
+
+### Settings
+
+<ParamField path="selector" type="string" required>
+  CSS selector for element
+</ParamField>
+
+<ParamField path="state" type="string" default="visible">
+  Element state to wait for:
+  - `visible` - Element is visible
+  - `hidden` - Element is hidden
+  - `attached` - Element exists in DOM
+  - `detached` - Element removed from DOM
+</ParamField>
+
+<ParamField path="timeout_ms" type="number" default="10000">
+  Maximum wait time in milliseconds
+</ParamField>
+
+### Example
+
+```json
+{
+  "block_type": "WaitForElement",
+  "label": "Wait for Dashboard",
+  "settings": {
+    "type": "WaitForElement",
+    "selector": "div.dashboard",
+    "state": "visible",
+    "timeout_ms": 10000
+  }
+}
+```
+
+## GetElementText
+
+Extract text or attribute from an element.
+
+### Settings
+
+<ParamField path="selector" type="string" required>
+  CSS selector for element
+</ParamField>
+
+<ParamField path="attribute" type="string">
+  Attribute to extract (leave empty for text content)
+  
+  Examples: `value`, `href`, `data-id`, `class`
+</ParamField>
+
+<ParamField path="output_var" type="string" default="ELEMENT_TEXT">
+  Variable name to store result
+</ParamField>
+
+<ParamField path="capture" type="boolean" default="false">
+  Capture as user-visible variable
+</ParamField>
+
+### Example
+
+```json
+{
+  "block_type": "GetElementText",
+  "label": "Extract Balance",
+  "settings": {
+    "type": "GetElementText",
+    "selector": "span.balance",
+    "output_var": "ACCOUNT_BALANCE",
+    "capture": true
+  }
+}
+```
+
+## Screenshot
+
+Capture a screenshot of the page or element.
+
+### Settings
+
+<ParamField path="full_page" type="boolean" default="false">
+  Capture entire scrollable page (not just viewport)
+</ParamField>
+
+<ParamField path="selector" type="string">
+  CSS selector to capture specific element (empty = full page)
+</ParamField>
+
+<ParamField path="output_var" type="string" default="SCREENSHOT_B64">
+  Variable name to store base64-encoded PNG
+</ParamField>
+
+### Example
+
+```json
+{
+  "block_type": "Screenshot",
+  "label": "Capture Page",
+  "settings": {
+    "type": "Screenshot",
+    "full_page": true,
+    "output_var": "PAGE_SCREENSHOT"
+  }
+}
+```
+
+## ExecuteJs
+
+Execute JavaScript code in the browser context.
+
+### Settings
+
+<ParamField path="code" type="string" required>
+  JavaScript code to execute
+  
+  The return value is stored in `output_var`
+</ParamField>
+
+<ParamField path="output_var" type="string" default="JS_RESULT">
+  Variable name to store return value
+</ParamField>
+
+<ParamField path="capture" type="boolean" default="false">
+  Capture as user-visible variable
+</ParamField>
+
+### Example
+
+```json
+{
+  "block_type": "ExecuteJs",
+  "label": "Get Page Title",
+  "settings": {
+    "type": "ExecuteJs",
+    "code": "return document.title;",
+    "output_var": "PAGE_TITLE",
+    "capture": true
+  }
+}
+```
+
+## Complete Browser Example
+
+```json
+{
+  "blocks": [
+    {
+      "block_type": "BrowserOpen",
+      "label": "Launch Browser",
+      "settings": {"type": "BrowserOpen", "headless": true}
+    },
+    {
+      "block_type": "NavigateTo",
+      "label": "Open Login",
+      "settings": {
+        "type": "NavigateTo",
+        "url": "https://example.com/login",
+        "wait_until": "networkidle"
+      }
+    },
+    {
+      "block_type": "TypeText",
+      "label": "Enter Email",
+      "settings": {
+        "type": "TypeText",
+        "selector": "input[name='email']",
+        "text": "<input.USER>"
+      }
+    },
+    {
+      "block_type": "TypeText",
+      "label": "Enter Password",
+      "settings": {
+        "type": "TypeText",
+        "selector": "input[name='password']",
+        "text": "<input.PASS>"
+      }
+    },
+    {
+      "block_type": "ClickElement",
+      "label": "Submit",
+      "settings": {
+        "type": "ClickElement",
+        "selector": "button[type='submit']",
+        "wait_for_navigation": true
+      }
+    },
+    {
+      "block_type": "WaitForElement",
+      "label": "Wait for Dashboard",
+      "settings": {
+        "type": "WaitForElement",
+        "selector": "div.dashboard",
+        "state": "visible"
+      }
+    },
+    {
+      "block_type": "GetElementText",
+      "label": "Get Username",
+      "settings": {
+        "type": "GetElementText",
+        "selector": "span.username",
+        "output_var": "LOGGED_IN_USER",
+        "capture": true
+      }
+    }
+  ]
+}
+```
+
+## Best Practices
+
+1. **Close browsers** when done to free resources
+2. **Use networkidle** for JavaScript-heavy pages
+3. **Add WaitForElement** before interacting with dynamic content
+4. **Set appropriate timeouts** for slow-loading pages
+5. **Use headless mode** in production for performance
+6. **Limit browser blocks** - they're slower than HTTP requests

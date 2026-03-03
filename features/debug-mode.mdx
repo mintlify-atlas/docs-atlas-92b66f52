@@ -1,0 +1,263 @@
+---
+title: Debug Mode
+description: Test pipelines with sample data and inspect requests/responses
+---
+
+Debug Mode lets you test your pipeline with sample data before running it at scale. Press **F5** or click the debug button to execute the pipeline once and inspect results.
+
+## Overview
+
+Debug Mode executes your pipeline blocks sequentially with test data you provide, capturing detailed information about each block's execution including HTTP requests, responses, timing, and variable changes.
+
+## Starting a Debug Session
+
+<Steps>
+  <Step title="Enter test data">
+    In the **Data / Proxy** panel (bottom of screen), enter:
+    - **Test data line**: Sample input like `testuser:password123`
+    - **Test proxy**: (Optional) Proxy to use for this test
+  </Step>
+
+  <Step title="Press F5">
+    Click the debug button in the toolbar or press **F5** to run the pipeline.
+  </Step>
+
+  <Step title="View results">
+    The debugger panel opens automatically, showing execution results for each block.
+  </Step>
+</Steps>
+
+## Debugger Panel
+
+The debugger displays comprehensive execution information:
+
+### Block Results
+
+For each block in your pipeline, you can see:
+
+- **Success/Fail status** - Whether the block executed successfully
+- **Timing** - Execution time in milliseconds
+- **Log message** - Human-readable output from the block
+- **Variables after** - All variables and their values after block execution
+
+### Request Inspector
+
+For HTTP blocks, view the full request details:
+
+```http
+POST /api/login HTTP/1.1
+Host: example.com
+User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64)...
+Content-Type: application/x-www-form-urlencoded
+
+username=testuser&password=password123
+```
+
+### Response Inspector
+
+View complete response data:
+
+- **Status code**: 200 OK, 401 Unauthorized, etc.
+- **Headers**: All response headers
+- **Body**: Full response content (formatted JSON, HTML, or raw text)
+- **Cookies**: Cookies set by the server
+- **Timing**: Request/response round-trip time
+- **Final URL**: URL after any redirects
+
+<Tip>
+JSON responses are automatically formatted with syntax highlighting for easy reading.
+</Tip>
+
+## Response Viewer
+
+The Response Viewer panel provides multiple views of HTTP responses:
+
+### Body Tab
+
+View the raw response body:
+
+- **Automatic formatting** for JSON responses
+- **Syntax highlighting** for code
+- **Search** within response content
+- **Copy** button for clipboard export
+
+### Headers Tab
+
+Inspect all response headers:
+
+```
+Content-Type: application/json
+Set-Cookie: session=abc123; Path=/; HttpOnly
+X-RateLimit-Remaining: 99
+```
+
+### Cookies Tab
+
+View cookies set during the request:
+
+| Name | Value | Path | Expires |
+|------|-------|------|--------|
+| session | abc123 | / | Session |
+| token | xyz789 | /api | 2026-03-04 |
+
+## Network Log
+
+The Network panel shows all HTTP requests made during pipeline execution:
+
+| Block | Method | URL | Status | Time | Size |
+|-------|--------|-----|--------|------|------|
+| Login Request | POST | /api/login | 200 | 245ms | 1.2 KB |
+| Get Profile | GET | /api/user/123 | 200 | 89ms | 512 B |
+
+Click any entry to view full request/response details.
+
+## Variables Inspector
+
+The Variables panel shows all variables at each stage:
+
+**Before execution:**
+```json
+{
+  "USER": "testuser",
+  "PASS": "password123",
+  "data.INPUT": "testuser:password123"
+}
+```
+
+**After HTTP request:**
+```json
+{
+  "USER": "testuser",
+  "PASS": "password123",
+  "SOURCE": "{\"success\":true,\"token\":\"abc123\"}",
+  "RESPONSECODE": "200",
+  "COOKIES": "session=xyz"
+}
+```
+
+**After parsing:**
+```json
+{
+  "USER": "testuser",
+  "PASS": "password123",
+  "SOURCE": "{\"success\":true,\"token\":\"abc123\"}",
+  "TOKEN": "abc123"
+}
+```
+
+## Debug Block
+
+You can debug a **single block** instead of the entire pipeline:
+
+<Steps>
+  <Step title="Right-click a block">
+    In the pipeline editor, right-click the block you want to test.
+  </Step>
+
+  <Step title="Select 'Debug This Block'">
+    Choose the debug option from the context menu.
+  </Step>
+
+  <Step title="View isolated results">
+    Only that block executes, using current variable state from previous debug runs.
+  </Step>
+</Steps>
+
+<Info>
+This is useful for testing a specific parsing block or logic condition without re-running the entire pipeline.
+</Info>
+
+## Test Data Format
+
+Your test data line should match your pipeline's **Data Settings**:
+
+### Credentials (username:password)
+```
+testuser:mypassword
+```
+Creates variables: `USER`, `PASS`
+
+### Email:Password
+```
+test@example.com:secret123
+```
+Creates variables: `USER` (email), `PASS`
+
+### Custom Separator
+If you configured separator as `|`:
+```
+value1|value2|value3
+```
+Creates variables based on your slice names.
+
+## Common Debugging Workflows
+
+### Testing HTTP Requests
+
+1. Add HTTP Request block with URL and headers
+2. Enter test credentials in Data panel
+3. Press F5 and check:
+   - Status code (should be 200 for success)
+   - Response body contains expected data
+   - Cookies are set if needed for subsequent requests
+
+### Debugging Parsing Blocks
+
+1. Run debug to populate `SOURCE` variable
+2. Check the response body in Response Viewer
+3. Add Parse Regex/JSON block with extraction pattern
+4. Press F5 again
+5. Verify extracted variable appears in Variables panel
+
+### Testing KeyCheck Logic
+
+1. Run debug to populate variables
+2. Add KeyCheck block with conditions
+3. Press F5
+4. Check that bot status changes to Success/Fail/Retry as expected
+5. View the KeyCheck block result to see which condition matched
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="HTTP request returns 0 or times out">
+    - Check your internet connection
+    - Verify the URL is correct and accessible
+    - Try increasing timeout in block settings
+    - Check if a proxy is required
+  </Accordion>
+
+  <Accordion title="Variable is empty after parsing">
+    - View the source data in Response Viewer
+    - Verify your regex/JSONPath pattern matches the data
+    - Check for typos in the pattern
+    - Use Debug Block to test parsing in isolation
+  </Accordion>
+
+  <Accordion title="KeyCheck doesn't match">
+    - Inspect variable values in Variables panel
+    - Verify condition uses correct variable name (case-sensitive)
+    - Check that comparison type matches data (EqualTo vs Contains)
+    - Test with simpler conditions first
+  </Accordion>
+</AccordionGroup>
+
+## Performance Metrics
+
+Debug mode tracks execution metrics:
+
+- **Total execution time**: End-to-end pipeline duration
+- **Per-block timing**: See which blocks are slow
+- **Network timing**: DNS, connect, TLS, transfer times
+- **Memory usage**: Variables and response sizes
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Jobs" icon="briefcase" href="/features/jobs">
+    Run your tested pipeline at scale with jobs
+  </Card>
+  <Card title="Export Code" icon="code" href="/features/export-code">
+    Generate standalone Rust code from your pipeline
+  </Card>
+</CardGroup>

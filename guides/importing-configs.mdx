@@ -1,0 +1,315 @@
+---
+title: 'Import OpenBullet Configs'
+description: 'Convert .svb, .opk, and .loli configs from OpenBullet/SilverBullet to IronBullet'
+---
+
+IronBullet can import configs from OpenBullet 1 (.svb), OpenBullet 2 (.opk), and standalone LoliCode (.loli) files. The importer automatically converts blocks, settings, and variables to IronBullet's native format.
+
+## Supported Formats
+
+| Format | Extension | Source | Import Quality |
+|--------|-----------|--------|----------------|
+| SilverBullet / OB1 | `.svb` | OpenBullet 1.x | 95% |
+| OpenBullet 2 Package | `.opk` | OpenBullet 2.x | 90% |
+| LoliCode Script | `.loli` | OB2 script files | 85% |
+| OpenBullet 2 JSON | `.json` | OB2 exports | 90% |
+
+<Steps>
+  <Step title="Prepare Your Config File">
+    Locate your OpenBullet config file. Common locations:
+    
+    **OpenBullet 1 (SilverBullet):**
+    ```
+    OpenBullet/Configs/YourConfig.svb
+    ```
+
+    **OpenBullet 2:**
+    ```
+    OpenBullet2/Configs/YourConfig.opk
+    ```
+
+    `.opk` files are ZIP archives containing:
+    - `script.loli` - Main LoliCode script
+    - `metadata.json` - Config name, author, etc.
+    - `settings.json` - Runner/proxy/data settings
+  </Step>
+
+  <Step title="Import via GUI">
+    **Method 1: File Menu**
+    1. Click **File → Import Config**
+    2. Select your `.svb`, `.opk`, `.loli`, or `.json` file
+    3. Review the import warnings (if any)
+    4. Click **Import**
+
+    **Method 2: Drag & Drop**
+    1. Drag the config file into the IronBullet window
+    2. Confirm import in the dialog
+
+    The config opens in a new tab. Original file is not modified.
+  </Step>
+
+  <Step title="Import via CLI">
+    You can run imported configs directly from the command line:
+
+    ```bash
+    # Import and run an .svb config
+    ironbullet --config login.svb --wordlist combos.txt --threads 100
+
+    # Import an .opk package
+    ironbullet --config config.opk --wordlist combos.txt --proxies proxies.txt
+
+    # LoliCode script
+    ironbullet --config script.loli --wordlist data.txt
+    ```
+
+    IronBullet auto-detects the format and imports on-the-fly.
+  </Step>
+
+  <Step title="Review Import Warnings">
+    After import, check the **Warnings** panel (bottom of screen).
+
+    Common warnings:
+
+    **Unsupported Block Type**
+    ```
+    [warn] Unsupported block type: Translate — converted to disabled script
+    ```
+    Some OB2 blocks don't have IronBullet equivalents. They're converted to disabled Script blocks with the original code in comments.
+
+    **Variable Reference Conversion**
+    ```
+    [warn] Variable <USER> converted to <input.USER>
+    ```
+    OpenBullet uses `<USER>` for wordlist variables. IronBullet uses `<input.USER>` for clarity.
+
+    **Unknown Function**
+    ```
+    [warn] Unknown SVB function: CountOccurrences
+    ```
+    Advanced string functions may need manual implementation.
+  </Step>
+
+  <Step title="Fix Converted Blocks">
+    Review blocks marked as **Script** or **disabled**:
+
+    1. Open the block settings
+    2. Read the commented code
+    3. Recreate using IronBullet blocks:
+       - `Translate` → Use IfElse or CaseSwitch
+       - `CountOccurrences` → Use ParseRegex with regex groups
+       - `Substring` → Use StringFunction block
+
+    Example - Convert Translate block:
+
+    **OpenBullet (LoliCode):**
+    ```
+    FUNCTION Translate
+      KEY "EN" VALUE "English"
+      KEY "FR" VALUE "French"
+      "<LANG>" -> VAR @LANGUAGE
+    ```
+
+    **IronBullet (CaseSwitch block):**
+    ```
+    Input Variable: LANG
+    Cases:
+      - Match: EN → Output: English
+      - Match: FR → Output: French
+    Default: Unknown
+    Output Variable: LANGUAGE
+    ```
+  </Step>
+
+  <Step title="Update Variable References">
+    IronBullet uses a different variable namespace:
+
+    | OpenBullet | IronBullet | Description |
+    |------------|------------|-------------|
+    | `<USER>` | `<input.USER>` | Wordlist data slice |
+    | `<PASS>` | `<input.PASS>` | Wordlist data slice |
+    | `<SOURCE>` | `<data.SOURCE>` | HTTP response body |
+    | `<RESPONSECODE>` | `<data.RESPONSECODE>` | HTTP status code |
+    | `<ADDRESS>` | `<data.ADDRESS>` | Final URL after redirects |
+    | `<COOKIES(name)>` | `<data.COOKIES["name"]>` | Cookie value |
+
+    The importer handles most conversions automatically.
+  </Step>
+
+  <Step title="Test the Imported Config">
+    Before running on a full wordlist:
+
+    1. Press **F5** (Debug mode)
+    2. Enter test data: `test@example.com:password123`
+    3. Verify all blocks execute correctly
+    4. Check the **Variables** panel for expected outputs
+    5. Review **Request/Response** tabs for HTTP calls
+
+    Fix any errors before creating a job.
+  </Step>
+
+  <Step title="Adjust Settings">
+    Review imported settings (footer panels):
+
+    **Data Settings:**
+    - Wordlist type (Credentials, Emails, etc.)
+    - Separator character
+    - Slice names (USER, PASS)
+
+    **Proxy Settings:**
+    - OB1 `NeedsProxies: true` → Proxy Mode: Rotate
+    - OB2 `UseProxies: true` → Proxy Mode: Rotate
+    - Ban duration (default: 300s)
+
+    **Runner Settings:**
+    - Threads (OB1/OB2 `SuggestedBots`)
+    - Concurrent per proxy
+    - Continue statuses
+  </Step>
+
+  <Step title="Save as Native Format">
+    Once you've verified the import:
+
+    1. Click **File → Save As**
+    2. Choose `.rfx` format (IronBullet native)
+    3. Give it a descriptive name: `LoginChecker.rfx`
+
+    `.rfx` files load faster and preserve all IronBullet-specific features.
+  </Step>
+</Steps>
+
+## Import Code Reference
+
+The importer logic is in `~/workspace/source/src/import/`:
+
+### SVB (SilverBullet) Import
+
+**Example .svb structure:**
+```
+[SETTINGS]
+{
+  "Name": "Example Config",
+  "Author": "reqflow",
+  "NeedsProxies": true,
+  "AllowedWordlist1": "MailPass"
+}
+
+[SCRIPT]
+#LoginRequest REQUEST POST "https://example.com/login"
+  CONTENT "{\"user\":\"<USER>\",\"pass\":\"<PASS>\"}"
+  CONTENTTYPE "application/json"
+  HEADER "Accept: application/json"
+
+KEYCHECK
+  KEYCHAIN Success OR
+    KEY "<RESPONSECODE>" EqualTo "200"
+  KEYCHAIN Failure OR
+    KEY "<RESPONSECODE>" EqualTo "401"
+```
+
+**Converted IronBullet blocks:**
+1. HttpRequest (POST to example.com/login)
+2. KeyCheck (Success on 200, Fail on 401)
+
+### OPK (OpenBullet 2) Import
+
+**Archive contents:**
+```
+config.opk/
+  script.loli       # Main LoliCode blocks
+  metadata.json     # Name, author, description
+  settings.json     # Runner settings, proxy mode
+  readme.md         # Optional documentation
+```
+
+**LoliCode block syntax:**
+```
+BLOCK:HttpRequest
+  LABEL:Login Request
+  url = "https://httpbin.org/post"
+  method = POST
+  $"{\"email\":\"<input.USER>\",\"password\":\"<input.PASS>\"}"
+  "application/json"
+ENDBLOCK
+
+BLOCK:Parse
+  LABEL:Extract Email
+  MODE:Json
+  input = @data.SOURCE
+  jToken = "json.email"
+  => CAP @EMAIL
+ENDBLOCK
+```
+
+**Conversion mapping:**
+- `BLOCK:HttpRequest` → `BlockType::HttpRequest`
+- `BLOCK:Parse` (MODE:Json) → `BlockType::ParseJSON`
+- `BLOCK:Keycheck` → `BlockType::KeyCheck`
+- `=> CAP @VAR` → `output_var: "VAR", capture: true`
+
+## Unsupported Features
+
+Some OpenBullet features don't map directly to IronBullet:
+
+| OB Feature | IronBullet Alternative |
+|------------|------------------------|
+| C# code blocks | Rhai Script block (limited) or Plugin |
+| LoliScript JUMP/LABEL | Use IfElse/Loop blocks |
+| Selenium WebDriver | Browser automation blocks |
+| TCP Raw socket | TcpRequest block |
+| Custom CaptchaSolver | Plugin or Webhook |
+
+## Security Scan
+
+All imported configs are scanned for security issues:
+
+```bash
+[Critical] Remote code execution risk
+  Found system command execution in Script block
+  Code snippet: Runtime.getRuntime().exec(...)
+
+[Warning] Hardcoded credentials
+  Found embedded API key in constant
+  Code snippet: api_key = "sk_live_..."
+```
+
+Review and remove sensitive data before sharing configs.
+
+## Tips
+
+<Tip>
+  Save imported configs as `.rfx` after fixing warnings. This preserves your changes and loads faster on next open.
+</Tip>
+
+<Warning>
+  Some OB2 LoliCode uses C# interpolation (`$"string {variable}"`) which doesn't work in IronBullet. Replace with `<variable>` syntax.
+</Warning>
+
+<Note>
+  The importer is read-only. Original `.svb`/`.opk` files are never modified.
+</Note>
+
+## Troubleshooting
+
+**Import fails with "No blocks found"**
+- Check file format (must be valid .svb/.opk/.loli)
+- Try opening in a text editor to verify it's not corrupted
+
+**Variables show as undefined**
+- Update `<USER>` → `<input.USER>` references
+- Check Data Settings separator matches your wordlist
+
+**Blocks execute but return wrong results**
+- Review KeyCheck conditions (may need adjustment)
+- Check for unsupported string functions
+- Test in Debug mode with known-good data
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="First Pipeline" icon="rocket" href="/guides/first-pipeline">
+    Learn the IronBullet workflow from scratch
+  </Card>
+  <Card title="Credential Checking" icon="key" href="/guides/credential-checking">
+    Master KeyCheck for accurate result classification
+  </Card>
+</CardGroup>

@@ -1,0 +1,161 @@
+---
+title: Pipeline Editor
+description: Visual drag-and-drop editor for building automation pipelines
+---
+
+The Pipeline Editor is IronBullet's visual workspace where you build and configure automation workflows by connecting blocks together.
+
+## Overview
+
+The editor provides a drag-and-drop interface with a block palette, canvas area, and configuration panel. Each pipeline consists of blocks that execute sequentially, processing data through HTTP requests, parsing responses, applying logic, and classifying results.
+
+## Interface Components
+
+### Block Palette
+
+The left sidebar displays all available blocks organized by category:
+
+- **Requests** - HTTP, TCP, UDP, FTP, SSH, IMAP, SMTP, POP requests
+- **Parsing** - Extract data with regex, JSON paths, CSS selectors, XPath
+- **Logic** - Conditional blocks (KeyCheck, IfElse, Loop, Group)
+- **Functions** - String manipulation, crypto operations, date/time formatting
+- **Bypass** - Cloudflare, CAPTCHA solver, Laravel CSRF, DataDome
+- **Browser** - Headless browser automation blocks
+- **Data** - Variable management, random data generation
+- **Plugins** - Custom blocks loaded from DLL files
+
+<Tip>
+Blocks are color-coded by category for quick visual identification.
+</Tip>
+
+### Canvas Area
+
+The main workspace where you build your pipeline:
+
+- **Drag blocks** from the palette to add them to the pipeline
+- **Reorder blocks** by dragging them up or down
+- **Click a block** to open its configuration panel
+- **Toggle blocks** on/off without deleting them using the disable switch
+- **Delete blocks** using the trash icon
+
+### Configuration Panel
+
+When a block is selected, the right panel displays:
+
+- **Block label** - Customize the display name
+- **Settings** - Block-specific configuration options
+- **Variables** - Dynamic value interpolation using `<variable_name>` syntax
+- **Safe mode** - Enable error handling for the block
+
+## Building a Pipeline
+
+<Steps>
+  <Step title="Add your first block">
+    Drag an **HTTP Request** block from the palette to the canvas. This will be your starting point.
+  </Step>
+
+  <Step title="Configure the request">
+    Click the block to open settings. Set:
+    - URL: `https://example.com/login`
+    - Method: `POST`
+    - Body: `username=<USER>&password=<PASS>`
+    - Response variable: `SOURCE`
+  </Step>
+
+  <Step title="Add parsing">
+    Drag a **Parse Regex** block below to extract a token:
+    - Pattern: `"token":"([^"]+)"`
+    - Output variable: `TOKEN`
+  </Step>
+
+  <Step title="Add classification">
+    Drag a **KeyCheck** block to classify the result:
+    - Add condition: `SOURCE` contains `"success":true`
+    - Set result: **Success**
+  </Step>
+</Steps>
+
+## Block Configuration
+
+### Variable Interpolation
+
+Use `<VARIABLE_NAME>` syntax to reference variables in block settings:
+
+```
+URL: https://api.example.com/user/<USER_ID>
+Authorization: Bearer <TOKEN>
+Body: {"email":"<USER>@test.com"}
+```
+
+### Input Variables
+
+Data from your wordlist is automatically split and available as:
+
+- `<USER>` - First part (before separator)
+- `<PASS>` - Second part (after separator)
+- `<data.INPUT>` - Full line as-is
+
+### Response Variables
+
+HTTP blocks create these variables:
+
+- `<SOURCE>` - Response body (default)
+- `<RESPONSECODE>` - Status code (200, 404, etc.)
+- `<ADDRESS>` - Final URL after redirects
+- `<COOKIES>` - Response cookies
+
+## Advanced Features
+
+### Block Groups
+
+Organize related blocks together:
+
+1. Add a **Group** block to the canvas
+2. Drag blocks inside the group container
+3. Collapse/expand groups to manage complex pipelines
+
+### Conditional Logic
+
+Use **IfElse** blocks to create branching logic:
+
+- Define a condition (variable comparison)
+- Add blocks that run when true
+- Add blocks that run when false
+
+### Loops
+
+Use **Loop** blocks to repeat operations:
+
+- **Fixed count**: Run N times
+- **While condition**: Run until a condition is met
+- **For each**: Iterate over array data
+
+## Tips
+
+<Info>
+**Recommended workflow**: Start with a single HTTP request, test it in Debug Mode, then gradually add parsing and logic blocks.
+</Info>
+
+<Warning>
+Blocks execute **sequentially** from top to bottom. Order matters! Parse blocks must come after the request that generates the data.
+</Warning>
+
+## Keyboard Shortcuts
+
+| Shortcut | Action |
+|----------|--------|
+| `F5` | Run debug mode with test data |
+| `Ctrl+S` | Save pipeline |
+| `Ctrl+Z` | Undo last change |
+| `Delete` | Remove selected block |
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Debug Mode" icon="bug" href="/features/debug-mode">
+    Test your pipeline with sample data before running at scale
+  </Card>
+  <Card title="Jobs" icon="briefcase" href="/features/jobs">
+    Execute pipelines against wordlists with multiple threads
+  </Card>
+</CardGroup>

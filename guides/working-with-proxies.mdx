@@ -1,0 +1,366 @@
+---
+title: 'Working with Proxies'
+description: 'Configure proxy sources, rotation modes, ban detection, and health checking'
+---
+
+Proxies are essential for high-volume checking to avoid rate limits and IP bans. IronBullet supports HTTP, HTTPS, SOCKS4, and SOCKS5 proxies with automatic rotation, ban detection, and health checking.
+
+## Proxy Modes
+
+IronBullet offers four proxy modes:
+
+| Mode | Behavior | Use Case |
+|------|----------|----------|
+| **None** | No proxies | Testing, private APIs |
+| **Rotate** | Random proxy per request | General checking |
+| **Sticky** | One proxy per data line | Session-based logins |
+| **CPM Limited** | Limit checks/min per proxy | Avoid soft bans |
+
+<Steps>
+  <Step title="Add Proxy Sources">
+    Click the **Proxy** tab in the footer panel.
+
+    Click **+ Add Source** and choose a type:
+
+    **File Source**
+    ```
+    Source Type: File
+    Path: proxies.txt
+    Default Type: Http
+    ```
+
+    **URL Source** (auto-refresh)
+    ```
+    Source Type: URL
+    URL: https://api.proxyscrape.com/v2/?request=get&protocol=http
+    Refresh Interval: 3600 (seconds)
+    Default Type: Http
+    ```
+
+    **Inline Source**
+    ```
+    Source Type: Inline
+    Value:
+      127.0.0.1:8080
+      192.168.1.100:3128
+    Default Type: Http
+    ```
+
+    You can add multiple sources - they're combined into one pool.
+  </Step>
+
+  <Step title="Proxy File Format">
+    Create `proxies.txt` with one proxy per line.
+
+    **With protocol prefix:**
+    ```
+    http://123.45.67.89:8080
+    https://98.76.54.32:3128
+    socks5://11.22.33.44:1080
+    socks4://55.66.77.88:1080
+    ```
+
+    **Without prefix (uses Default Type):**
+    ```
+    123.45.67.89:8080
+    98.76.54.32:3128
+    ```
+
+    **With authentication:**
+    ```
+    http://username:password@123.45.67.89:8080
+    socks5://user:pass@11.22.33.44:1080
+    ```
+
+    **Format variations (auto-detected):**
+    ```
+    host:port
+    host:port:user:pass
+    type:host:port:user:pass
+    ```
+
+    All formats are parsed by the `ProxyPool::from_file()` logic in `src/runner/proxy_pool.rs:39-50`.
+  </Step>
+
+  <Step title="Configure Proxy Mode">
+    **Rotate Mode** (most common)
+    ```
+    Proxy Mode: Rotate
+    Ban Duration: 300 (seconds)
+    Max Retries Before Ban: 3
+    ```
+
+    Each request uses a random proxy from the pool. If a proxy gets rate-limited, it's banned for 5 minutes.
+
+    **Sticky Mode** (session persistence)
+    ```
+    Proxy Mode: Sticky
+    ```
+
+    The same proxy is used for all requests in a single pipeline run (one data line). Useful for:
+    - Multi-step logins that check IP consistency
+    - Session-based authentication
+    - Scrapers that need stable IPs
+
+    **CPM Limited Mode** (rate control)
+    ```
+    Proxy Mode: CpmLimited
+    CPM Per Proxy: 30
+    ```
+
+    Each proxy is limited to 30 checks per minute. IronBullet automatically pauses requests to stay under the limit.
+  </Step>
+
+  <Step title="Enable Ban Detection">
+    Add a **KeyCheck** block to detect rate limits:
+
+    ```
+    Keychain:
+      Result: Ban
+      Mode: OR
+      Conditions:
+        - data.RESPONSECODE EqualTo 429
+        - data.SOURCE Contains "Too many requests"
+        - data.SOURCE Contains "rate limit exceeded"
+        - data.SOURCE Contains "Please slow down"
+    ```
+
+    When a check is marked as **Ban**:
+    1. The current proxy is banned for `ban_duration_secs`
+    2. The data line is re-queued
+    3. Next attempt uses a different proxy
+
+    This prevents wasting your entire proxy pool on a banned IP.
+  </Step>
+
+  <Step title="Test Proxy Configuration">
+    Before running a full job, test your proxies:
+
+    **Method 1: Debug Mode**
+    1. Press **F5**
+    2. Enter test data
+    3. Check the **Network** tab for proxy usage
+    4. Verify the request IP changed from your real IP
+
+    **Method 2: Test Endpoint**
+    Create a simple pipeline:
+    ```
+    1. HttpRequest
+       URL: https://api.ipify.org?format=json
+       Method: GET
+
+    2. ParseJSON
+       JSON Path: ip
+       Output Variable: PROXY_IP
+       Capture: true
+    ```
+
+    Run with proxies enabled. The captured IP should match your proxy.
+  </Step>
+
+  <Step title="Monitor Proxy Health">
+    During a job run, check the **Stats Panel**:
+
+    ```
+    Proxies: 150 total, 143 active
+    Banned: 7
+    ```
+
+    **Active proxies** = total - currently banned
+
+    If active count drops to 0, all proxies are banned. Options:
+    - Lower thread count
+    - Increase ban duration
+    - Add more proxies
+    - Reduce CPM limit
+  </Step>
+
+  <Step title="Advanced: Proxy Groups">
+    For complex setups, use **Proxy Groups**:
+
+    ```yaml
+    Proxy Groups:
+      - Name: Premium ISP
+        Mode: Rotate
+        Sources:
+          - File: premium_proxies.txt
+        CPM Per Proxy: 60
+
+      - Name: Datacenter
+        Mode: CpmLimited
+        Sources:
+          - URL: https://proxysource.com/datacenter
+        CPM Per Proxy: 30
+
+    Active Group: Premium ISP
+    ```
+
+    Switch between groups based on target requirements.
+  </Step>
+</Steps>
+
+## Proxy Pool Implementation
+
+The proxy pool is managed by `ProxyPool` in `src/runner/proxy_pool.rs`:
+
+```rust
+pub struct ProxyPool {
+    proxies: Vec<ProxyEntry>,
+    index: AtomicUsize,
+    bans: RwLock<HashMap<String, Instant>>,
+    ban_duration_secs: u64,
+}
+
+impl ProxyPool {
+    pub fn next_proxy(&self) -> Option<String> {
+        // Round-robin selection
+        // Skip banned proxies
+        // Returns None if pool is empty
+    }
+
+    pub fn ban_proxy(&self, proxy: &str) {
+        // Add to ban list with current timestamp
+        // Auto-unbanned after ban_duration_secs
+    }
+}
+```
+
+**Key features:**
+- **Thread-safe**: Uses `AtomicUsize` for index, `RwLock` for bans
+- **Automatic unban**: Bans expire based on timestamp
+- **Graceful fallback**: Returns a banned proxy if all are banned (better than blocking)
+
+## Common Proxy Issues
+
+### All Proxies Banned
+
+**Symptoms:**
+- CPM drops to zero
+- "Active proxies: 0" in stats
+- All checks fail or get rate-limited
+
+**Solutions:**
+1. Increase ban duration → gives proxies more recovery time
+2. Lower thread count → reduce requests per second
+3. Enable CPM Limited mode → throttle per-proxy requests
+4. Add more proxies to the pool
+
+### Proxy Authentication Failures
+
+**Error:** `407 Proxy Authentication Required`
+
+**Fix:** Use the full auth format:
+```
+http://username:password@proxy.example.com:8080
+```
+
+Not:
+```
+proxy.example.com:8080  # Wrong - no auth
+```
+
+### Slow Performance with Proxies
+
+**Cause:** Dead/slow proxies in the pool
+
+**Solution:** Pre-filter proxies using a checker tool, or use URL sources that auto-update.
+
+### SOCKS Proxies Not Working
+
+**Check:**
+1. Protocol prefix: `socks5://` or `socks4://`
+2. Port is correct (usually 1080)
+3. Target site allows SOCKS connections
+
+Some sites block SOCKS. Try HTTP/HTTPS proxies instead.
+
+## Real-World Setup Examples
+
+### High-Volume Checking (10K+ CPM)
+
+```yaml
+Proxy Mode: Rotate
+Threads: 500
+Proxies: 200+ premium residential
+Ban Duration: 600 seconds
+Max Retries Before Ban: 2
+CPM Per Proxy: 50
+```
+
+### Session-Based Login
+
+```yaml
+Proxy Mode: Sticky
+Threads: 100
+Proxies: 50 datacenter
+Ban Duration: 300 seconds
+```
+
+Each account check uses the same proxy throughout (login → fetch balance → logout).
+
+### Rate-Limited API
+
+```yaml
+Proxy Mode: CpmLimited
+Threads: 50
+Proxies: 10 rotating
+CPM Per Proxy: 20
+Ban Duration: 900 seconds
+```
+
+Stays under API limits (20 req/min per IP).
+
+## CLI Usage
+
+Run with proxies from command line:
+
+```bash
+# Basic proxy file
+ironbullet --config login.rfx --wordlist combos.txt --proxies proxies.txt
+
+# Override threads
+ironbullet -c config.rfx -w data.txt -p proxies.txt -t 200
+
+# Debug mode (see proxy usage)
+ironbullet -c config.rfx -w test.txt -p proxies.txt --debug
+```
+
+## Tips
+
+<Tip>
+  Use **URL sources** for auto-refreshing proxy lists. Set refresh interval to 3600 (1 hour) for scraped proxies.
+</Tip>
+
+<Warning>
+  Never share proxy lists in exported configs. Use File/URL sources instead of Inline.
+</Warning>
+
+<Note>
+  The `Default Type` setting applies to plain `host:port` lines without a protocol prefix. If your list has mixed types, include the prefix on each line.
+</Note>
+
+## Debugging Proxy Issues
+
+Enable verbose logging:
+
+```bash
+ironbullet --config login.rfx --wordlist data.txt --proxies proxies.txt --debug
+```
+
+Check stderr output for:
+```
+[*] proxies: 150 loaded
+[*] using proxy: http://123.45.67.89:8080
+[warn] proxy banned: http://123.45.67.89:8080 (429 Too Many Requests)
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Browser Automation" icon="browser" href="/guides/browser-automation">
+    Use browser blocks with proxies for JavaScript-rendered sites
+  </Card>
+  <Card title="Credential Checking" icon="key" href="/guides/credential-checking">
+    Build robust ban detection with KeyCheck
+  </Card>
+</CardGroup>

@@ -1,0 +1,377 @@
+---
+title: 'Control Flow Blocks'
+description: 'Manage pipeline execution with conditionals, loops, delays, and variables'
+---
+
+## Overview
+
+Control flow blocks manage the execution logic of your pipeline:
+
+- **IfElse**: Conditional branching
+- **Loop**: Iteration over lists or repetition
+- **Delay**: Add pauses between operations
+- **CaseSwitch**: Multi-branch selection
+- **SetVariable**: Store values in variables
+- **Script**: Execute custom JavaScript
+- **Log**: Output debugging messages
+
+## IfElse
+
+Execute different block sequences based on a condition.
+
+### Settings
+
+<ParamField path="condition" type="KeyCondition" required>
+  Condition to evaluate (same format as KeyCheck conditions)
+  
+  ```json
+  {
+    "source": "data.RESPONSECODE",
+    "comparison": "EqualTo",
+    "value": "200"
+  }
+  ```
+</ParamField>
+
+<ParamField path="true_blocks" type="Block[]">
+  Blocks to execute when condition is true
+</ParamField>
+
+<ParamField path="false_blocks" type="Block[]">
+  Blocks to execute when condition is false
+</ParamField>
+
+### Example
+
+```json
+{
+  "block_type": "IfElse",
+  "label": "Check Login Status",
+  "settings": {
+    "type": "IfElse",
+    "condition": {
+      "source": "data.RESPONSECODE",
+      "comparison": "EqualTo",
+      "value": "200"
+    },
+    "true_blocks": [
+      {
+        "block_type": "ParseJSON",
+        "label": "Extract Token",
+        "settings": {
+          "type": "ParseJSON",
+          "json_path": "json.token",
+          "output_var": "TOKEN"
+        }
+      }
+    ],
+    "false_blocks": [
+      {
+        "block_type": "Log",
+        "label": "Log Error",
+        "settings": {
+          "type": "Log",
+          "message": "Login failed: <data.RESPONSECODE>"
+        }
+      }
+    ]
+  }
+}
+```
+
+## Loop
+
+Iterate over lists or repeat blocks multiple times.
+
+### Settings
+
+<ParamField path="loop_type" type="LoopType" required>
+  Type of loop:
+  - `ForEach` - Iterate over list items
+  - `Repeat` - Repeat N times
+</ParamField>
+
+<ParamField path="list_var" type="string">
+  Variable containing list to iterate (for ForEach)
+</ParamField>
+
+<ParamField path="item_var" type="string" default="ITEM">
+  Variable name for current item (accessible as `data.{item_var}`)
+</ParamField>
+
+<ParamField path="count" type="number" default="1">
+  Number of iterations (for Repeat)
+</ParamField>
+
+<ParamField path="blocks" type="Block[]">
+  Blocks to execute in each iteration
+</ParamField>
+
+### ForEach Example
+
+```json
+{
+  "block_type": "Loop",
+  "label": "Process Each User",
+  "settings": {
+    "type": "Loop",
+    "loop_type": "ForEach",
+    "list_var": "data.USER_IDS",
+    "item_var": "USER_ID",
+    "blocks": [
+      {
+        "block_type": "HttpRequest",
+        "label": "Fetch User",
+        "settings": {
+          "type": "HttpRequest",
+          "method": "GET",
+          "url": "https://api.example.com/users/<data.USER_ID>"
+        }
+      }
+    ]
+  }
+}
+```
+
+### Repeat Example
+
+```json
+{
+  "block_type": "Loop",
+  "label": "Retry 3 Times",
+  "settings": {
+    "type": "Loop",
+    "loop_type": "Repeat",
+    "count": 3,
+    "blocks": [
+      {
+        "block_type": "HttpRequest",
+        "label": "Try Request",
+        "settings": {
+          "type": "HttpRequest",
+          "method": "GET",
+          "url": "https://api.example.com/data"
+        }
+      },
+      {
+        "block_type": "Delay",
+        "label": "Wait",
+        "settings": {
+          "type": "Delay",
+          "min_ms": 1000,
+          "max_ms": 2000
+        }
+      }
+    ]
+  }
+}
+```
+
+## Delay
+
+Pause execution for a random or fixed duration.
+
+### Settings
+
+<ParamField path="min_ms" type="number" default="1000">
+  Minimum delay in milliseconds
+</ParamField>
+
+<ParamField path="max_ms" type="number" default="1000">
+  Maximum delay in milliseconds
+  
+  The actual delay is randomly selected between min_ms and max_ms
+</ParamField>
+
+### Examples
+
+```json
+{
+  "block_type": "Delay",
+  "label": "Fixed Delay",
+  "settings": {
+    "type": "Delay",
+    "min_ms": 1000,
+    "max_ms": 1000
+  }
+}
+```
+
+```json
+{
+  "block_type": "Delay",
+  "label": "Random Delay",
+  "settings": {
+    "type": "Delay",
+    "min_ms": 500,
+    "max_ms": 2000
+  }
+}
+```
+
+## CaseSwitch
+
+Multi-branch selection based on input value (like switch/case).
+
+### Settings
+
+<ParamField path="input_var" type="string" default="data.RESPONSECODE">
+  Variable to match against
+</ParamField>
+
+<ParamField path="cases" type="CaseBranch[]">
+  Array of case branches
+  
+  Each branch has:
+  - `match_value`: Value to match
+  - `result_value`: Output value if matched
+</ParamField>
+
+<ParamField path="default_value" type="string">
+  Default value if no cases match
+</ParamField>
+
+<ParamField path="output_var" type="string" default="RESULT">
+  Variable name to store result
+</ParamField>
+
+<ParamField path="capture" type="boolean" default="false">
+  Capture as user-visible variable
+</ParamField>
+
+### Example
+
+```json
+{
+  "block_type": "CaseSwitch",
+  "label": "Map Status Code",
+  "settings": {
+    "type": "CaseSwitch",
+    "input_var": "data.RESPONSECODE",
+    "cases": [
+      {"match_value": "200", "result_value": "SUCCESS"},
+      {"match_value": "401", "result_value": "UNAUTHORIZED"},
+      {"match_value": "403", "result_value": "BAN"},
+      {"match_value": "429", "result_value": "RATE_LIMIT"}
+    ],
+    "default_value": "ERROR",
+    "output_var": "STATUS",
+    "capture": true
+  }
+}
+```
+
+## SetVariable
+
+Store a value in a variable.
+
+### Settings
+
+<ParamField path="name" type="string" required>
+  Variable name (without `data.` prefix)
+</ParamField>
+
+<ParamField path="value" type="string" required>
+  Value to store (supports variable interpolation)
+</ParamField>
+
+<ParamField path="capture" type="boolean" default="false">
+  Capture as user-visible variable
+</ParamField>
+
+### Examples
+
+```json
+{
+  "block_type": "SetVariable",
+  "label": "Set API Endpoint",
+  "settings": {
+    "type": "SetVariable",
+    "name": "API_URL",
+    "value": "https://api.example.com/v2"
+  }
+}
+```
+
+```json
+{
+  "block_type": "SetVariable",
+  "label": "Build Auth Header",
+  "settings": {
+    "type": "SetVariable",
+    "name": "AUTH_HEADER",
+    "value": "Bearer <data.TOKEN>",
+    "capture": true
+  }
+}
+```
+
+## Script
+
+Execute custom JavaScript code for complex logic.
+
+### Settings
+
+<ParamField path="code" type="string" required>
+  JavaScript code to execute
+  
+  Available variables:
+  - `data` - Access to all pipeline variables
+  - `input` - Access to input variables
+  - Return value is stored in output_var
+</ParamField>
+
+<ParamField path="output_var" type="string" default="RESULT">
+  Variable name to store return value
+</ParamField>
+
+<ParamField path="capture" type="boolean" default="false">
+  Capture as user-visible variable
+</ParamField>
+
+### Example
+
+```json
+{
+  "block_type": "Script",
+  "label": "Custom Logic",
+  "settings": {
+    "type": "Script",
+    "code": "const total = data.PRICE * data.QUANTITY; return total > 100 ? 'PREMIUM' : 'STANDARD';",
+    "output_var": "TIER",
+    "capture": true
+  }
+}
+```
+
+## Log
+
+Output messages to the console for debugging.
+
+### Settings
+
+<ParamField path="message" type="string" required>
+  Message to log (supports variable interpolation)
+</ParamField>
+
+### Example
+
+```json
+{
+  "block_type": "Log",
+  "label": "Debug Output",
+  "settings": {
+    "type": "Log",
+    "message": "Processing user: <input.USER>, status: <data.STATUS>"
+  }
+}
+```
+
+## Best Practices
+
+1. **Use IfElse sparingly** - KeyCheck often handles branching better
+2. **Limit loop iterations** - Large loops can slow down pipelines
+3. **Add delays between requests** - Prevent rate limiting
+4. **Use descriptive variable names** in SetVariable
+5. **Test scripts thoroughly** - JavaScript errors halt execution
+6. **Use Log blocks** for debugging complex pipelines

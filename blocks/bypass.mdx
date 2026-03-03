@@ -1,0 +1,377 @@
+---
+title: 'Bypass & Anti-Bot Blocks'
+description: 'Solve captchas and bypass anti-bot protection systems'
+---
+
+## Overview
+
+Bypass blocks help circumvent anti-bot protection systems:
+
+- **CaptchaSolver**: Solve reCAPTCHA, hCaptcha via third-party services
+- **CloudflareBypass**: Bypass Cloudflare challenges
+- **OcrCaptcha**: OCR-based image captcha solving
+- **RecaptchaInvisible**: Handle invisible reCAPTCHA
+- **DataDomeSensor**: Generate DataDome sensor data
+- **AkamaiV3Sensor**: Encrypt/decrypt Akamai V3 sensor payloads
+- **XacfSensor**: Generate XACF sensor data
+
+## CaptchaSolver
+
+Solve captchas using third-party solving services.
+
+### Settings
+
+<ParamField path="solver_service" type="string" default="capsolver">
+  Captcha solving service to use
+  
+  Supported services: `capsolver`, `2captcha`, `anticaptcha`
+</ParamField>
+
+<ParamField path="api_key" type="string" required>
+  API key for the solving service
+</ParamField>
+
+<ParamField path="site_key" type="string" required>
+  Site key (data-sitekey) from the target website
+</ParamField>
+
+<ParamField path="page_url" type="string" required>
+  URL of the page with the captcha
+</ParamField>
+
+<ParamField path="captcha_type" type="string" default="RecaptchaV2">
+  Type of captcha:
+  - `RecaptchaV2`
+  - `RecaptchaV3`
+  - `hCaptcha`
+  - `FunCaptcha`
+  - `ImageCaptcha`
+</ParamField>
+
+<ParamField path="output_var" type="string" default="CAPTCHA_TOKEN">
+  Variable name to store solved token
+</ParamField>
+
+<ParamField path="timeout_ms" type="number" default="120000">
+  Maximum time to wait for solution (2 minutes default)
+</ParamField>
+
+<ParamField path="capture" type="boolean" default="false">
+  Capture as user-visible variable
+</ParamField>
+
+### Example
+
+```json
+{
+  "block_type": "CaptchaSolver",
+  "label": "Solve reCAPTCHA",
+  "settings": {
+    "type": "CaptchaSolver",
+    "solver_service": "capsolver",
+    "api_key": "<globals.CAPSOLVER_KEY>",
+    "site_key": "6LdRcpYUAAAAAJBhD0TZ1bN8Qw8K",
+    "page_url": "https://example.com/login",
+    "captcha_type": "RecaptchaV2",
+    "output_var": "RECAPTCHA_TOKEN",
+    "capture": true
+  }
+}
+```
+
+## CloudflareBypass
+
+Bypass Cloudflare challenges using FlareSolverr.
+
+### Settings
+
+<ParamField path="url" type="string" required>
+  Target URL protected by Cloudflare
+</ParamField>
+
+<ParamField path="flaresolverr_url" type="string" default="http://localhost:8191/v1">
+  FlareSolverr API endpoint
+</ParamField>
+
+<ParamField path="max_timeout_ms" type="number" default="60000">
+  Maximum time to wait for challenge solution
+</ParamField>
+
+<ParamField path="output_var" type="string" default="CF_COOKIES">
+  Variable name to store Cloudflare cookies
+</ParamField>
+
+<ParamField path="capture" type="boolean" default="false">
+  Capture as user-visible variable
+</ParamField>
+
+### Example
+
+```json
+{
+  "block_type": "CloudflareBypass",
+  "label": "Bypass Cloudflare",
+  "settings": {
+    "type": "CloudflareBypass",
+    "url": "https://protected-site.com",
+    "flaresolverr_url": "http://localhost:8191/v1",
+    "max_timeout_ms": 60000,
+    "output_var": "CF_COOKIES"
+  }
+}
+```
+
+## OcrCaptcha
+
+Solve image captchas using OCR (Tesseract).
+
+### Settings
+
+<ParamField path="input_var" type="string" default="SCREENSHOT_B64">
+  Variable containing base64-encoded captcha image
+</ParamField>
+
+<ParamField path="language" type="string" default="eng">
+  OCR language code (e.g., `eng`, `spa`, `fra`)
+</ParamField>
+
+<ParamField path="psm" type="number" default="7">
+  Tesseract page segmentation mode (0-13)
+  
+  Common values:
+  - `6` - Assume single uniform block of text
+  - `7` - Treat image as single text line
+  - `8` - Treat image as single word
+</ParamField>
+
+<ParamField path="whitelist" type="string">
+  Character whitelist (only recognize these characters)
+  
+  Example: `0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ`
+</ParamField>
+
+<ParamField path="output_var" type="string" default="OCR_TEXT">
+  Variable name to store recognized text
+</ParamField>
+
+<ParamField path="capture" type="boolean" default="false">
+  Capture as user-visible variable
+</ParamField>
+
+### Example
+
+```json
+{
+  "block_type": "OcrCaptcha",
+  "label": "Read Captcha",
+  "settings": {
+    "type": "OcrCaptcha",
+    "input_var": "data.CAPTCHA_IMAGE_B64",
+    "language": "eng",
+    "psm": 7,
+    "whitelist": "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789",
+    "output_var": "CAPTCHA_TEXT",
+    "capture": true
+  }
+}
+```
+
+## RecaptchaInvisible
+
+Generate invisible reCAPTCHA tokens.
+
+### Settings
+
+<ParamField path="ar" type="string">
+  ar parameter value
+</ParamField>
+
+<ParamField path="sitekey" type="string" required>
+  reCAPTCHA site key
+</ParamField>
+
+<ParamField path="co" type="string">
+  co parameter (origin domain)
+</ParamField>
+
+<ParamField path="hi" type="string">
+  hi parameter
+</ParamField>
+
+<ParamField path="v" type="string">
+  reCAPTCHA version
+</ParamField>
+
+<ParamField path="size" type="string" default="invisible">
+  Challenge size (usually "invisible")
+</ParamField>
+
+<ParamField path="action" type="string">
+  reCAPTCHA v3 action name
+</ParamField>
+
+<ParamField path="cb" type="string">
+  Callback parameter
+</ParamField>
+
+<ParamField path="anchor_url" type="string">
+  Anchor iframe URL
+</ParamField>
+
+<ParamField path="reload_url" type="string">
+  Reload iframe URL
+</ParamField>
+
+<ParamField path="user_agent" type="string" default="Mozilla/5.0...">
+  User-Agent to use
+</ParamField>
+
+<ParamField path="output_var" type="string" default="RECAPTCHA_TOKEN">
+  Variable name to store token
+</ParamField>
+
+<ParamField path="capture" type="boolean" default="false">
+  Capture as user-visible variable
+</ParamField>
+
+## DataDomeSensor
+
+Generate DataDome sensor data.
+
+### Settings
+
+<ParamField path="site_url" type="string" required>
+  Target site URL
+</ParamField>
+
+<ParamField path="cookie_datadome" type="string" required>
+  DataDome cookie value
+</ParamField>
+
+<ParamField path="user_agent" type="string" default="Mozilla/5.0...">
+  User-Agent string
+</ParamField>
+
+<ParamField path="custom_wasm_b64" type="string">
+  Custom WASM module (base64-encoded)
+</ParamField>
+
+<ParamField path="output_var" type="string" default="DD_SENSOR">
+  Variable name to store sensor data
+</ParamField>
+
+<ParamField path="capture" type="boolean" default="false">
+  Capture as user-visible variable
+</ParamField>
+
+### Example
+
+```json
+{
+  "block_type": "DataDomeSensor",
+  "label": "Generate Sensor",
+  "settings": {
+    "type": "DataDomeSensor",
+    "site_url": "https://protected-site.com",
+    "cookie_datadome": "<data.DD_COOKIE>",
+    "user_agent": "<data.USER_AGENT>",
+    "output_var": "DD_SENSOR"
+  }
+}
+```
+
+## AkamaiV3Sensor
+
+Encrypt or decrypt Akamai V3 sensor payloads.
+
+### Settings
+
+<ParamField path="mode" type="AkamaiV3Mode" required>
+  Operation mode:
+  - `Encrypt` - Encrypt payload to sensor data
+  - `Decrypt` - Decrypt sensor data to payload
+  - `ExtractCookieHash` - Extract hash from cookie
+</ParamField>
+
+<ParamField path="payload_var" type="string" default="SENSOR_PAYLOAD">
+  Variable containing payload data
+</ParamField>
+
+<ParamField path="file_hash" type="string">
+  Akamai file hash
+</ParamField>
+
+<ParamField path="cookie_hash" type="string" default="8888888">
+  Cookie hash value
+</ParamField>
+
+<ParamField path="output_var" type="string" default="AKAMAI_SENSOR">
+  Variable name to store result
+</ParamField>
+
+<ParamField path="capture" type="boolean" default="false">
+  Capture as user-visible variable
+</ParamField>
+
+### Example
+
+```json
+{
+  "block_type": "AkamaiV3Sensor",
+  "label": "Encrypt Sensor",
+  "settings": {
+    "type": "AkamaiV3Sensor",
+    "mode": "Encrypt",
+    "payload_var": "data.SENSOR_PAYLOAD",
+    "file_hash": "<data.AKAMAI_HASH>",
+    "cookie_hash": "8888888",
+    "output_var": "AKAMAI_SENSOR"
+  }
+}
+```
+
+## XacfSensor
+
+Generate XACF sensor data.
+
+### Settings
+
+<ParamField path="bundle_id" type="string" required>
+  Application bundle ID
+</ParamField>
+
+<ParamField path="version" type="string" default="2.1.2">
+  XACF version
+</ParamField>
+
+<ParamField path="output_var" type="string" default="XACF_SENSOR">
+  Variable name to store sensor data
+</ParamField>
+
+<ParamField path="capture" type="boolean" default="false">
+  Capture as user-visible variable
+</ParamField>
+
+### Example
+
+```json
+{
+  "block_type": "XacfSensor",
+  "label": "Generate XACF",
+  "settings": {
+    "type": "XacfSensor",
+    "bundle_id": "com.example.app",
+    "version": "2.1.2",
+    "output_var": "XACF_SENSOR"
+  }
+}
+```
+
+## Best Practices
+
+1. **Use captcha solvers sparingly** - They cost money per solve
+2. **Cache bypass tokens** when possible to avoid repeated solves
+3. **Set appropriate timeouts** - Captcha solving can take 10-60 seconds
+4. **Rotate API keys** if you hit rate limits
+5. **Test bypass methods** on staging/test environments first
+6. **Keep sensor data fresh** - Many sensors have short validity periods

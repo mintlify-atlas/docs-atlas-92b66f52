@@ -1,0 +1,304 @@
+---
+title: Block settings reference
+description: Type-specific settings for all block types
+---
+
+Every block has a `settings` field containing type-specific configuration. The `BlockSettings` enum wraps all possible settings variants.
+
+## Block structure
+
+Defined in `src/pipeline/block/mod.rs:43-52`
+
+<ParamField path="id" type="Uuid" required>
+  Unique identifier for the block instance
+</ParamField>
+
+<ParamField path="block_type" type="BlockType" required>
+  Block type enum (HttpRequest, ParseJSON, KeyCheck, etc.)
+</ParamField>
+
+<ParamField path="label" type="string" required>
+  Display name shown in the editor
+</ParamField>
+
+<ParamField path="disabled" type="boolean" required>
+  Whether the block is skipped during execution
+  
+  **Default:** `false`
+</ParamField>
+
+<ParamField path="safe_mode" type="boolean" required>
+  If true, block errors won't fail the entire pipeline
+  
+  **Default:** `false`
+</ParamField>
+
+<ParamField path="settings" type="BlockSettings" required>
+  Type-specific configuration for this block
+</ParamField>
+
+## BlockSettings enum
+
+The `BlockSettings` enum has variants for all 50+ block types. Each variant wraps a type-specific settings struct.
+
+### Common patterns
+
+Most block settings follow these patterns:
+
+**Output variable:**
+```rust
+output_var: String  // Where to store the result
+capture: bool       // Whether to add to captured data
+```
+
+**Source input:**
+```rust
+source: String  // Variable interpolation: "<data.EMAIL>" or "{{EMAIL}}"
+```
+
+**Mode selection:**
+```rust
+mode: SomeEnum  // Operation mode (e.g., StringMode::Concat, LoopMode::ForEach)
+```
+
+## Example settings
+
+### HttpRequest settings
+
+From `configs/example.rfx`:
+
+```json
+{
+  "type": "HttpRequest",
+  "method": "POST",
+  "url": "https://httpbin.org/post",
+  "headers": [
+    ["Content-Type", "application/json"],
+    ["Accept", "application/json"]
+  ],
+  "body": "{\"email\":\"<input.USER>\",\"password\":\"<input.PASS>\"}",
+  "body_type": "Raw",
+  "content_type": "application/json",
+  "follow_redirects": true,
+  "max_redirects": 8,
+  "timeout_ms": 10000,
+  "auto_redirect": true,
+  "basic_auth": null
+}
+```
+
+**Key fields:**
+- `method`: HTTP verb (GET, POST, PUT, DELETE, etc.)
+- `url`: Target URL with variable interpolation
+- `headers`: Array of `[name, value]` tuples
+- `body`: Request body (supports RAW/EMBED/VAR modes)
+- `timeout_ms`: Request timeout in milliseconds
+
+### ParseJSON settings
+
+From `configs/example.rfx`:
+
+```json
+{
+  "type": "ParseJSON",
+  "json_path": "json.email",
+  "output_var": "EMAIL",
+  "capture": true
+}
+```
+
+**Key fields:**
+- `json_path`: JSONPath query (dot notation)
+- `output_var`: Variable name to store result
+- `capture`: Add to captured data for output
+
+### KeyCheck settings
+
+From `configs/example.rfx`:
+
+```json
+{
+  "type": "KeyCheck",
+  "keychains": [
+    {
+      "result": "Success",
+      "conditions": [
+        {
+          "source": "data.RESPONSECODE",
+          "comparison": "EqualTo",
+          "value": "200"
+        }
+      ]
+    },
+    {
+      "result": "Fail",
+      "conditions": [
+        {
+          "source": "data.RESPONSECODE",
+          "comparison": "EqualTo",
+          "value": "401"
+        }
+      ]
+    }
+  ]
+}
+```
+
+**Key fields:**
+- `keychains`: Array of condition sets
+- `result`: BotStatus to set (Success, Fail, Ban, Retry, Error, Custom)
+- `conditions`: Array of comparisons (all must match)
+- `comparison`: Operator (EqualTo, Contains, GreaterThan, LessThan, etc.)
+
+## BlockType enum
+
+All 50+ available block types from `src/pipeline/block/mod.rs:69-143`:
+
+```rust
+pub enum BlockType {
+    // HTTP & Protocols
+    HttpRequest,
+    TcpRequest,
+    UdpRequest,
+    FtpRequest,
+    SshRequest,
+    ImapRequest,
+    SmtpRequest,
+    PopRequest,
+    
+    // Parsing
+    ParseLR,
+    ParseRegex,
+    ParseJSON,
+    ParseCSS,
+    ParseXPath,
+    ParseCookie,
+    Parse,
+    LambdaParser,
+    
+    // Checks
+    KeyCheck,
+    
+    // Functions
+    StringFunction,
+    ListFunction,
+    CryptoFunction,
+    ConversionFunction,
+    DateFunction,
+    FloatFunction,
+    IntegerFunction,
+    TimeFunction,
+    
+    // Control Flow
+    IfElse,
+    Loop,
+    Delay,
+    Script,
+    CaseSwitch,
+    SetVariable,
+    Group,
+    
+    // Browser
+    BrowserOpen,
+    NavigateTo,
+    ClickElement,
+    TypeText,
+    WaitForElement,
+    GetElementText,
+    Screenshot,
+    ExecuteJs,
+    
+    // Bypass
+    CaptchaSolver,
+    CloudflareBypass,
+    LaravelCsrf,
+    OcrCaptcha,
+    RecaptchaInvisible,
+    DataDomeSensor,
+    AkamaiV3Sensor,
+    XacfSensor,
+    
+    // Utilities
+    Log,
+    ClearCookies,
+    Webhook,
+    WebSocket,
+    RandomUserAgent,
+    RandomData,
+    Plugin,
+    FileSystem,
+    Constants,
+    Dictionary,
+    ByteArray,
+    CookieContainer,
+    GenerateGUID,
+    PhoneCountry,
+}
+```
+
+## Block categories
+
+Blocks are organized into 9 categories (from `src/pipeline/block/mod.rs:213-226`):
+
+| Category | Color | Block Types |
+|----------|-------|-------------|
+| **Requests** | `#0078d4` | HttpRequest, TcpRequest, UdpRequest, FtpRequest, SshRequest, ImapRequest, SmtpRequest, PopRequest |
+| **Parsing** | `#4ec9b0` | ParseLR, ParseRegex, ParseJSON, ParseCSS, ParseXPath, ParseCookie, LambdaParser, Parse |
+| **Checks** | `#d7ba7d` | KeyCheck |
+| **Functions** | `#c586c0` | StringFunction, ListFunction, CryptoFunction, ConversionFunction, DateFunction, FloatFunction, IntegerFunction, TimeFunction |
+| **Control** | `#dcdcaa` | IfElse, Loop, Delay, Script, CaseSwitch, Group |
+| **Browser** | `#e06c75` | BrowserOpen, NavigateTo, ClickElement, TypeText, WaitForElement, GetElementText, Screenshot, ExecuteJs |
+| **Bypass** | `#e5c07b` | CaptchaSolver, CloudflareBypass, OcrCaptcha, RecaptchaInvisible |
+| **Sensors** | `#2dd4bf` | XacfSensor, DataDomeSensor, AkamaiV3Sensor |
+| **Utilities** | `#858585` | Log, SetVariable, ClearCookies, Webhook, WebSocket, RandomUserAgent, RandomData, Plugin |
+
+## Variable interpolation in settings
+
+Most string fields support variable interpolation:
+
+```json
+"url": "https://example.com/login?user=<input.USER>"
+"body": "password={{data.PASS}}"
+"output_var": "RESULT_<input.USER>"
+```
+
+**Syntax:**
+- `<variable>` - Interpolate and URL-encode
+- `{{variable}}` - Interpolate without encoding
+
+**Scopes:**
+- `input.*` - Original wordlist data
+- `data.*` - Runtime variables (HTTP responses, parsed values)
+- `globals.*` - Global constants
+- `user.*` - User-defined variables
+
+See [Variables](/concepts/variables) for complete documentation.
+
+## Default settings
+
+Every block type has default settings (from `src/pipeline/block/mod.rs:246-310`):
+
+```rust
+impl BlockType {
+    pub fn default_settings(&self) -> BlockSettings {
+        match self {
+            Self::HttpRequest => BlockSettings::HttpRequest(HttpRequestSettings::default()),
+            Self::ParseJSON => BlockSettings::ParseJSON(ParseJSONSettings::default()),
+            // ... etc for all 50+ types
+        }
+    }
+}
+```
+
+Call `Block::new(block_type)` to create a block with default settings.
+
+## See also
+
+<CardGroup cols={2}>
+  <Card title="Pipeline API" icon="diagram-project" href="/api/pipeline">
+    Pipeline structure and configuration
+  </Card>
+  <Card title="Block reference" icon="cube" href="/blocks/overview">
+    User guide for all block types
+  </Card>
+</CardGroup>

@@ -1,0 +1,220 @@
+---
+title: 'Installation'
+description: 'Install IronBullet on Windows or Linux'
+---
+
+## System Requirements
+
+### Windows
+- Windows 10 or later
+- Microsoft Edge WebView2 Runtime
+- 4GB RAM minimum (8GB recommended for large datasets)
+- 200MB disk space
+
+### Linux
+- Ubuntu 20.04+, Debian 11+, Fedora 35+, Arch Linux, or openSUSE
+- WebKitGTK 4.0 or 4.1
+- 4GB RAM minimum (8GB recommended for large datasets)
+- 200MB disk space
+
+<Note>
+The sidecar binary (`reqflow-sidecar`) is required for AzureTLS HTTP requests but optional. RustTLS requests will still work without it.
+</Note>
+
+## Download
+
+<Steps>
+  <Step title="Get the Latest Release">
+    Download the latest version from the [GitHub Releases page](https://github.com/ZeraTS/ironbullet/releases).
+
+    Current version: **v0.2.3**
+
+    Choose the appropriate package for your operating system:
+    - Windows: `ironbullet-v0.2.3-windows-x64.zip`
+    - Linux: `ironbullet-v0.2.3-linux-x64.tar.gz`
+  </Step>
+
+  <Step title="Extract the Archive">
+    Extract the downloaded archive to a folder of your choice.
+
+    The archive contains:
+    - `ironbullet` / `ironbullet.exe` - Main application binary
+    - `reqflow-sidecar` / `reqflow-sidecar.exe` - Sidecar for AzureTLS HTTP (must be in same directory)
+    - `start.sh` (Linux only) - Launcher script with dependency checks
+  </Step>
+</Steps>
+
+## Windows Installation
+
+### Install WebView2 Runtime
+
+IronBullet requires the Microsoft Edge WebView2 Runtime. Most Windows 10/11 systems already have it installed.
+
+<Steps>
+  <Step title="Check if WebView2 is Installed">
+    Try launching `ironbullet.exe`. If WebView2 is missing, you'll see an error dialog.
+  </Step>
+
+  <Step title="Download WebView2 Runtime">
+    If needed, download the WebView2 Runtime from:
+
+    [https://go.microsoft.com/fwlink/p/?LinkId=2124703](https://go.microsoft.com/fwlink/p/?LinkId=2124703)
+
+    This is the official Microsoft evergreen bootstrapper installer.
+  </Step>
+
+  <Step title="Install and Restart">
+    Run the installer and follow the prompts. After installation completes, launch `ironbullet.exe`.
+  </Step>
+</Steps>
+
+<Warning>
+Ensure `reqflow-sidecar.exe` is in the same directory as `ironbullet.exe`. The application will run without it, but AzureTLS HTTP requests won't work.
+</Warning>
+
+### Launch IronBullet
+
+Simply double-click `ironbullet.exe` to start the application.
+
+## Linux Installation
+
+### Install WebKitGTK
+
+IronBullet requires WebKitGTK for its embedded web renderer. Install it using your distribution's package manager:
+
+<Tabs>
+  <Tab title="Ubuntu/Debian 22.04+">
+    ```bash
+    sudo apt update
+    sudo apt install libwebkit2gtk-4.1-0
+    ```
+  </Tab>
+
+  <Tab title="Ubuntu/Debian 20.04">
+    ```bash
+    sudo apt update
+    sudo apt install libwebkit2gtk-4.0-37
+    ```
+  </Tab>
+
+  <Tab title="Fedora/RHEL">
+    ```bash
+    sudo dnf install webkit2gtk4.1
+    ```
+  </Tab>
+
+  <Tab title="Arch Linux">
+    ```bash
+    sudo pacman -S webkit2gtk-4.1
+    ```
+  </Tab>
+
+  <Tab title="openSUSE">
+    ```bash
+    sudo zypper install libwebkit2gtk-4_1-0
+    ```
+  </Tab>
+</Tabs>
+
+### Launch IronBullet
+
+<Steps>
+  <Step title="Use the Launcher Script (Recommended)">
+    The `start.sh` script checks for dependencies and displays helpful error messages:
+
+    ```bash
+    cd /path/to/ironbullet
+    ./start.sh
+    ```
+
+    The script will:
+    - Check for WebKitGTK installation
+    - Verify the `reqflow-sidecar` binary
+    - Make binaries executable
+    - Launch IronBullet with proper error handling
+  </Step>
+
+  <Step title="Alternative: Direct Launch">
+    You can also run the binary directly:
+
+    ```bash
+    cd /path/to/ironbullet
+    chmod +x ironbullet reqflow-sidecar
+    ./ironbullet
+    ```
+
+    <Note>
+    If WebKitGTK is not installed, the binary will crash with a dynamic linker error. Use `start.sh` for better error messages.
+    </Note>
+  </Step>
+</Steps>
+
+<Warning>
+Ensure `reqflow-sidecar` is in the same directory as the `ironbullet` binary and is executable (`chmod +x reqflow-sidecar`).
+</Warning>
+
+## CLI Mode
+
+IronBullet also supports CLI mode for headless execution:
+
+```bash
+ironbullet --config pipeline.json --help
+```
+
+When running with `--config` or `--help` flags, IronBullet runs in CLI mode without launching the GUI.
+
+<Tip>
+On Windows, the binary will automatically attach to the parent console when running in CLI mode, so output is visible in your terminal.
+</Tip>
+
+## Verification
+
+After installation, verify IronBullet is working:
+
+<Steps>
+  <Step title="Launch the Application">
+    Start IronBullet using the appropriate method for your OS.
+  </Step>
+
+  <Step title="Check the Main Window">
+    You should see the IronBullet interface with:
+    - Block palette on the left
+    - Canvas in the center
+    - Settings panel on the right
+  </Step>
+
+  <Step title="Test Block Placement">
+    Try dragging an HTTP Request block from the palette onto the canvas to verify the interface is responsive.
+  </Step>
+</Steps>
+
+## Troubleshooting
+
+### Windows: WebView2 Not Found
+
+If you see "WebView2 runtime was not found" error:
+
+1. Download and install from [https://go.microsoft.com/fwlink/p/?LinkId=2124703](https://go.microsoft.com/fwlink/p/?LinkId=2124703)
+2. Restart IronBullet after installation
+3. If still not working, try installing Edge browser (includes WebView2)
+
+### Linux: Dynamic Linker Error
+
+If you see errors like "error while loading shared libraries: libwebkit2gtk":
+
+1. Install WebKitGTK using the commands above for your distribution
+2. Verify installation: `ldconfig -p | grep libwebkit2gtk`
+3. Use the `start.sh` launcher script for better error messages
+
+### Missing Sidecar Binary
+
+If you see warnings about `reqflow-sidecar` not found:
+
+1. Ensure you extracted the complete archive
+2. Keep `reqflow-sidecar` in the same directory as the main binary
+3. On Linux, make it executable: `chmod +x reqflow-sidecar`
+4. RustTLS HTTP requests will still work without it
+
+## Next Steps
+
+Now that IronBullet is installed, continue to the [Quick Start](/quickstart) guide to create your first pipeline.

@@ -1,0 +1,499 @@
+---
+title: 'CLI Options'
+description: 'Detailed reference for all IronBullet command-line flags and options'
+---
+
+## Overview
+
+This page documents every CLI flag available in IronBullet, including aliases, data types, default values, and validation rules.
+
+## Argument Parser
+
+IronBullet uses a custom argument parser implemented in `cli.rs:30-98`. Arguments are parsed from left to right, supporting both long-form (`--flag`) and short-form (`-f`) syntax.
+
+## Flag Reference
+
+### --config
+
+<ParamField path="--config" type="string" required>
+  **Alias:** `-c`
+  
+  **Required:** Yes
+  
+  **Description:** Path to the configuration file
+  
+  **Supported Formats:**
+  - `.rfx` - IronBullet native binary format
+  - `.svb` - SilverBullet XML format
+  - `.opk` - OpenBullet compressed format
+  - `.loli` - LoliCode script format
+  - `.json` - JSON format
+  
+  **Format Detection:** For `.rfx` files, IronBullet loads the native format directly. For all other extensions, the file is read as bytes and the format is auto-detected by the import system.
+  
+  **Validation:**
+  - File must exist and be readable
+  - Must be a valid config in one of the supported formats
+  
+  **Source:** `cli.rs:43-45`, `cli.rs:119-144`
+  
+  **Example:**
+  ```bash
+  ironbullet --config /path/to/config.rfx -w wordlist.txt
+  ironbullet -c imported-config.svb -w data.txt
+  ```
+</ParamField>
+
+### --wordlist
+
+<ParamField path="--wordlist" type="string" required>
+  **Alias:** `-w`
+  
+  **Required:** Yes
+  
+  **Description:** Path to the wordlist/combo file containing data lines to process
+  
+  **Format:** Plain text file with one entry per line. Format depends on config's data pool settings:
+  - **Line mode:** Each line is treated as a single value
+  - **CSV mode:** Lines are split by delimiter into multiple fields
+  
+  **Validation:**
+  - File must exist and be readable
+  - Empty files are allowed but will result in no processing
+  
+  **Source:** `cli.rs:47-49`, `cli.rs:172-173`
+  
+  **Example:**
+  ```bash
+  ironbullet -c config.rfx --wordlist combos.txt
+  ironbullet -c config.rfx -w /data/emails.txt
+  ```
+</ParamField>
+
+### --threads
+
+<ParamField path="--threads" type="u32">
+  **Alias:** `-t`
+  
+  **Required:** No
+  
+  **Default:** Uses `pipeline.runner_settings.threads` from config file
+  
+  **Description:** Number of concurrent worker threads
+  
+  **Range:** Typically 1-500. Higher values require more system resources.
+  
+  **Validation:**
+  - Must be a positive integer
+  - Value is parsed with `.parse::<u32>()`
+  - Invalid values (non-numeric, negative, too large) cause error
+  
+  **Override Behavior:** When specified, this value replaces the thread count in the config file at `cli.rs:153-155`
+  
+  **Source:** `cli.rs:51-54`
+  
+  **Example:**
+  ```bash
+  ironbullet -c config.rfx -w data.txt --threads 100
+  ironbullet -c config.rfx -w data.txt -t 25
+  ```
+  
+  **Error Example:**
+  ```bash
+  $ ironbullet -c config.rfx -w data.txt --threads abc
+  error: invalid thread count: abc
+  ```
+</ParamField>
+
+### --proxies
+
+<ParamField path="--proxies" type="string">
+  **Alias:** `-p`
+  
+  **Required:** No
+  
+  **Default:** No proxies (direct connection)
+  
+  **Description:** Path to proxy list file
+  
+  **Format:** Plain text file, one proxy per line. Supports:
+  - `http://host:port`
+  - `https://host:port`
+  - `socks5://host:port`
+  - `socks4://host:port`
+  - Optional authentication: `protocol://user:pass@host:port`
+  
+  **Behavior:** Proxies are loaded into a ProxyPool with ban duration from `pipeline.proxy_settings.ban_duration_secs`
+  
+  **Validation:**
+  - File must exist and be readable
+  - Invalid proxy formats are logged as warnings but don't halt execution
+  
+  **Source:** `cli.rs:56-58`, `cli.rs:196-203`
+  
+  **Example:**
+  ```bash
+  ironbullet -c config.rfx -w data.txt --proxies socks5-list.txt
+  ironbullet -c config.rfx -w data.txt -p /proxies/http.txt
+  ```
+</ParamField>
+
+### --outfile
+
+<ParamField path="--outfile" type="string">
+  **Alias:** `-o`
+  
+  **Required:** No
+  
+  **Default:** `results/` (specified in config)
+  
+  **Description:** Output directory for saving hits and results
+  
+  **Behavior:**
+  - Sets `pipeline.output_settings.output_directory` to the specified path
+  - Automatically enables `pipeline.output_settings.save_to_file = true`
+  
+  **Directory Creation:** Directory is created automatically if it doesn't exist when hits are saved
+  
+  **Source:** `cli.rs:60-62`, `cli.rs:162-165`
+  
+  **Example:**
+  ```bash
+  ironbullet -c config.rfx -w data.txt --outfile ./results/
+  ironbullet -c config.rfx -w data.txt -o /output/2024-01-15/
+  ```
+</ParamField>
+
+### --skip
+
+<ParamField path="--skip" type="u32">
+  **Alias:** None
+  
+  **Required:** No
+  
+  **Default:** `0`
+  
+  **Description:** Skip the first N lines from the wordlist
+  
+  **Use Case:** Resume interrupted runs by skipping already-processed lines
+  
+  **Behavior:**
+  - Wordlist is loaded fully into memory
+  - First `skip` lines are discarded via `.skip(skip)` iterator
+  - Remaining lines are processed
+  
+  **Validation:**
+  - Must be a positive integer
+  - If skip >= total lines, no processing occurs (empty data pool)
+  
+  **Override Behavior:** Sets `pipeline.runner_settings.skip` at `cli.rs:156-158`
+  
+  **Source:** `cli.rs:64-67`, `cli.rs:176-190`
+  
+  **Example:**
+  ```bash
+  # Skip first 5000 lines
+  ironbullet -c config.rfx -w data.txt --skip 5000
+  ```
+  
+  **Combined with --take:**
+  ```bash
+  # Process lines 1000-1999
+  ironbullet -c config.rfx -w data.txt --skip 1000 --take 1000
+  ```
+</ParamField>
+
+### --take
+
+<ParamField path="--take" type="u32">
+  **Alias:** None
+  
+  **Required:** No
+  
+  **Default:** `0` (process all lines)
+  
+  **Description:** Process only N lines from the wordlist (after skip)
+  
+  **Use Case:** Test configs on a subset of data
+  
+  **Behavior:**
+  - Value of `0` means process all remaining lines (no limit)
+  - Non-zero value limits processing via `.take(take)` iterator
+  - Applied after `--skip`
+  
+  **Validation:**
+  - Must be a non-negative integer
+  - Value of `0` is valid and means "take all"
+  
+  **Override Behavior:** Sets `pipeline.runner_settings.take` at `cli.rs:159-161`
+  
+  **Source:** `cli.rs:69-72`, `cli.rs:176-190`
+  
+  **Example:**
+  ```bash
+  # Process only first 100 lines
+  ironbullet -c config.rfx -w data.txt --take 100
+  
+  # Process all lines (explicit)
+  ironbullet -c config.rfx -w data.txt --take 0
+  ```
+</ParamField>
+
+### --debug
+
+<ParamField path="--debug" type="boolean">
+  **Alias:** `-d`
+  
+  **Required:** No
+  
+  **Default:** `false`
+  
+  **Description:** Enable debug mode for verbose output
+  
+  **Behavior:**
+  - Each block execution result is printed to stderr
+  - Proxy information is printed for each hit
+  - Useful for troubleshooting config issues
+  
+  **Flag Type:** This is a boolean flag (no value required)
+  
+  **Source:** `cli.rs:74-76`, `cli.rs:211`, `cli.rs:257-261`
+  
+  **Output Format:**
+  ```
+  [HIT] user@example.com:pass | token=abc
+    proxy: socks5://127.0.0.1:9050
+  ```
+  
+  **Example:**
+  ```bash
+  ironbullet -c config.rfx -w data.txt --debug
+  ironbullet -c config.rfx -w data.txt -d
+  ```
+</ParamField>
+
+### --help
+
+<ParamField path="--help" type="boolean">
+  **Alias:** `-h`
+  
+  **Required:** No
+  
+  **Description:** Display help message and exit
+  
+  **Behavior:**
+  - Prints usage information to stderr via `print_help()` at `cli.rs:100-116`
+  - Exits with code `0` immediately
+  - No other processing occurs
+  
+  **Flag Type:** Boolean flag (no value required)
+  
+  **Source:** `cli.rs:77-80`
+  
+  **Example:**
+  ```bash
+  ironbullet --help
+  ironbullet -h
+  ```
+  
+  **Output:**
+  ```
+  ironbullet — pipelined request automation
+
+  USAGE:
+    ironbullet --config <path> --wordlist <path> [options]
+
+  OPTIONS:
+    -c, --config <path>     Config file (.rfx, .svb, .opk, .loli, .json)
+    -w, --wordlist <path>   Wordlist / combo file
+    -t, --threads <n>       Thread count (overrides config)
+    -p, --proxies <path>    Proxy list file
+    -o, --outfile <dir>     Output directory for hits (default: results/)
+        --skip <n>          Skip first N data lines
+        --take <n>          Process only N data lines (0 = all)
+    -d, --debug             Print each block result to stderr
+    -h, --help              Show this help
+  ```
+</ParamField>
+
+## Argument Parsing Rules
+
+### Order Independence
+
+Flags can appear in any order:
+
+```bash
+# All valid
+ironbullet --config test.rfx --wordlist data.txt --threads 50
+ironbullet --threads 50 --config test.rfx --wordlist data.txt
+ironbullet -w data.txt -t 50 -c test.rfx
+```
+
+### Value Requirements
+
+Flags that require values must have a following argument:
+
+```bash
+# Valid
+ironbullet --config test.rfx
+ironbullet -c test.rfx
+
+# Invalid - missing value
+ironbullet --config --wordlist data.txt
+# Error: --config requires a path
+```
+
+### Boolean Flags
+
+Boolean flags (`--debug`, `--help`) don't take values:
+
+```bash
+# Valid
+ironbullet -c test.rfx -w data.txt --debug
+ironbullet --help
+
+# Invalid - don't provide values
+ironbullet --debug true  # 'true' will be treated as unknown argument
+```
+
+### Unknown Arguments
+
+Any unrecognized flag causes an error:
+
+```bash
+$ ironbullet --config test.rfx --wordlist data.txt --unknown-flag
+error: unknown argument: --unknown-flag
+run with --help for usage
+```
+
+**Source:** `cli.rs:81-83`
+
+## Data Types
+
+### String Arguments
+
+Flags: `--config`, `--wordlist`, `--proxies`, `--outfile`
+
+- Stored as `Option<String>` during parsing
+- Required flags are unwrapped with `.ok_or("error")` at `cli.rs:89-90`
+- No additional validation during parsing (file existence checked later)
+
+### Integer Arguments
+
+Flags: `--threads`, `--skip`, `--take`
+
+- Parsed using `.parse::<u32>()`
+- Errors return descriptive message: `format!("invalid {}: {}", flag, val)`
+- Valid range: `0` to `4,294,967,295` (u32 max)
+
+**Source:** `cli.rs:54`, `cli.rs:67`, `cli.rs:72`
+
+### Boolean Flags
+
+Flags: `--debug`, `--help`
+
+- Stored as `bool` (not `Option<bool>`)
+- Default value is `false`
+- Presence of flag sets to `true`
+- No argument value consumed
+
+**Source:** `cli.rs:38`, `cli.rs:75`
+
+## CliArgs Structure
+
+All parsed arguments are stored in the `CliArgs` struct:
+
+```rust
+pub struct CliArgs {
+    pub config: String,          // Required
+    pub wordlist: String,        // Required
+    pub threads: Option<u32>,    // Optional - overrides config
+    pub proxies: Option<String>, // Optional - path to proxy list
+    pub outfile: Option<String>, // Optional - output directory
+    pub skip: Option<u32>,       // Optional - default 0
+    pub take: Option<u32>,       // Optional - default 0 (all)
+    pub debug: bool,             // Optional - default false
+}
+```
+
+**Source:** `cli.rs:19-28`
+
+## Validation & Error Handling
+
+### Argument Parsing Errors
+
+Parsing errors are returned as `Result<CliArgs, String>` with descriptive messages:
+
+| Error Condition | Error Message | Exit Code |
+|-----------------|---------------|--------|
+| Missing required flag | `"--config is required"` | `1` |
+| Missing required flag | `"--wordlist is required"` | `1` |
+| Missing value | `"--config requires a path"` | `1` |
+| Invalid number | `"invalid thread count: {val}"` | `1` |
+| Unknown flag | `"unknown argument: {arg}"` | `1` |
+
+**Source:** `cli.rs:45`, `cli.rs:49`, `cli.rs:54`, `cli.rs:82`, `main.rs:213-217`
+
+### Runtime Errors
+
+Runtime errors during config loading or execution:
+
+| Error Condition | Error Format | Exit Code |
+|-----------------|--------------|--------|
+| Config load failure | `"failed to load {path}: {error}"` | `1` |
+| Config read failure | `"failed to read {path}: {error}"` | `1` |
+| Wordlist load failure | `"failed to load wordlist: {error}"` | `1` |
+| Proxy load failure | `"failed to load proxies: {error}"` | `1` |
+
+**Source:** `cli.rs:122`, `cli.rs:129`, `cli.rs:173`, `cli.rs:198`, `main.rs:222-225`
+
+## Import Warnings
+
+When loading non-native config formats (`.svb`, `.opk`, `.loli`), the import system may emit warnings:
+
+```
+[warn] SilverBullet keycheck 'BAN' mapped to 'RETRY'
+[warn] Block 'ParseJson' uses legacy syntax
+```
+
+These are printed to stderr but don't halt execution.
+
+**Source:** `cli.rs:132-136`
+
+## Security Issues
+
+The config import system may detect security issues in imported configs:
+
+```
+[MEDIUM] Unsafe Regex — Pattern contains catastrophic backtracking risk
+[HIGH] Command Injection — Block executes shell commands with user input
+```
+
+These are logged but don't prevent execution. Review them carefully.
+
+**Source:** `cli.rs:137-141`
+
+## Platform Differences
+
+### Windows
+
+- Executable: `ironbullet.exe`
+- Console attachment: Automatic via `AttachConsole(ATTACH_PARENT_PROCESS)`
+- Required for CLI output when compiled with `windows_subsystem = "windows"`
+
+**Source:** `main.rs:188-195`
+
+### Linux/macOS
+
+- Executable: `ironbullet`
+- No special console handling required
+- Direct stdout/stderr output
+
+**Source:** `main.rs:197-198`
+
+## See Also
+
+- [CLI Commands Reference](/api/cli-commands) - Usage examples and workflows
+- [Pipeline API](/api/pipeline) - Pipeline structure and configuration
+- [Config Format](/api/config-format) - .rfx file format specification
+- [Importing Configs](/guides/importing-configs) - Supported config formats

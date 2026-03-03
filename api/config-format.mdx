@@ -1,0 +1,300 @@
+---
+title: Config file format (.rfx)
+description: Native .rfx config file format specification
+---
+
+IronBullet uses the `.rfx` (ReqFlow eXecution) format for pipeline configs. This is a JSON-based format that wraps a complete `Pipeline` with version metadata.
+
+## File structure
+
+Defined in `src/export/format.rs:5-18`
+
+```rust
+pub struct RfxConfig {
+    pub version: u32,
+    pub metadata: RfxMetadata,
+    pub pipeline: Pipeline,
+}
+
+pub struct RfxMetadata {
+    pub name: String,
+    pub author: String,
+    pub created: String,     // ISO 8601 timestamp
+    pub modified: String,    // ISO 8601 timestamp
+}
+```
+
+## RfxConfig fields
+
+<ParamField path="version" type="u32" required>
+  File format version number
+  
+  **Current version:** `1`
+</ParamField>
+
+<ParamField path="metadata" type="RfxMetadata" required>
+  Config metadata (name, author, timestamps)
+</ParamField>
+
+<ParamField path="pipeline" type="Pipeline" required>
+  Complete pipeline structure with blocks and settings
+  
+  See [Pipeline API](/api/pipeline) for field documentation
+</ParamField>
+
+## RfxMetadata fields
+
+<ParamField path="name" type="string" required>
+  Config name (duplicates `pipeline.name` for top-level access)
+</ParamField>
+
+<ParamField path="author" type="string" required>
+  Author name or identifier
+</ParamField>
+
+<ParamField path="created" type="string" required>
+  Creation timestamp in ISO 8601 format (RFC 3339)
+  
+  **Example:** `"2026-02-15T00:00:00Z"`
+</ParamField>
+
+<ParamField path="modified" type="string" required>
+  Last modification timestamp in ISO 8601 format
+</ParamField>
+
+## Example config
+
+Complete `.rfx` file from `configs/example.rfx`:
+
+```json
+{
+  "version": 1,
+  "metadata": {
+    "name": "Example Login Config",
+    "author": "reqflow",
+    "created": "2026-02-15T00:00:00Z",
+    "modified": "2026-02-15T00:00:00Z"
+  },
+  "pipeline": {
+    "id": "00000000-0000-0000-0000-000000000001",
+    "name": "Example Login Config",
+    "author": "reqflow",
+    "created": "2026-02-15T00:00:00Z",
+    "modified": "2026-02-15T00:00:00Z",
+    "blocks": [
+      {
+        "id": "10000000-0000-0000-0000-000000000001",
+        "block_type": "HttpRequest",
+        "label": "Login Request",
+        "disabled": false,
+        "safe_mode": false,
+        "settings": {
+          "type": "HttpRequest",
+          "method": "POST",
+          "url": "https://httpbin.org/post",
+          "headers": [
+            ["Content-Type", "application/json"],
+            ["Accept", "application/json"]
+          ],
+          "body": "{\"email\":\"<input.USER>\",\"password\":\"<input.PASS>\"}",
+          "body_type": "Raw",
+          "content_type": "application/json",
+          "follow_redirects": true,
+          "max_redirects": 8,
+          "timeout_ms": 10000,
+          "auto_redirect": true,
+          "basic_auth": null
+        }
+      },
+      {
+        "id": "10000000-0000-0000-0000-000000000002",
+        "block_type": "ParseJSON",
+        "label": "Extract Data",
+        "disabled": false,
+        "safe_mode": false,
+        "settings": {
+          "type": "ParseJSON",
+          "json_path": "json.email",
+          "output_var": "EMAIL",
+          "capture": true
+        }
+      },
+      {
+        "id": "10000000-0000-0000-0000-000000000003",
+        "block_type": "KeyCheck",
+        "label": "Check Status",
+        "disabled": false,
+        "safe_mode": false,
+        "settings": {
+          "type": "KeyCheck",
+          "keychains": [
+            {
+              "result": "Success",
+              "conditions": [
+                {
+                  "source": "data.RESPONSECODE",
+                  "comparison": "EqualTo",
+                  "value": "200"
+                }
+              ]
+            },
+            {
+              "result": "Fail",
+              "conditions": [
+                {
+                  "source": "data.RESPONSECODE",
+                  "comparison": "EqualTo",
+                  "value": "401"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    ],
+    "startup_blocks": [],
+    "data_settings": {
+      "wordlist_type": "Credentials",
+      "separator": ":",
+      "slices": ["USER", "PASS"]
+    },
+    "proxy_settings": {
+      "proxy_mode": "None",
+      "proxy_sources": [],
+      "ban_duration_secs": 300,
+      "max_retries_before_ban": 3
+    },
+    "browser_settings": {
+      "browser": "chrome",
+      "ja3": null,
+      "http2_fingerprint": null,
+      "user_agent": null
+    }
+  }
+}
+```
+
+## File operations
+
+From `src/export/format.rs:20-45`:
+
+### Save to file
+
+```rust
+impl RfxConfig {
+    pub fn save_to_file(&self, path: &str) -> Result<()> {
+        let json = serde_json::to_string_pretty(self)?;
+        std::fs::write(path, json)?;
+        Ok(())
+    }
+}
+```
+
+**Usage:**
+```rust
+let config = RfxConfig::from_pipeline(&pipeline);
+config.save_to_file("my_config.rfx")?;
+```
+
+### Load from file
+
+```rust
+impl RfxConfig {
+    pub fn load_from_file(path: &str) -> Result<Self> {
+        let data = std::fs::read_to_string(path)?;
+        let config: Self = serde_json::from_str(&data)?;
+        Ok(config)
+    }
+}
+```
+
+**Usage:**
+```rust
+let config = RfxConfig::load_from_file("my_config.rfx")?;
+let pipeline = config.pipeline;
+```
+
+### Create from pipeline
+
+```rust
+impl RfxConfig {
+    pub fn from_pipeline(pipeline: &Pipeline) -> Self {
+        Self {
+            version: 1,
+            metadata: RfxMetadata {
+                name: pipeline.name.clone(),
+                author: pipeline.author.clone(),
+                created: pipeline.created.to_rfc3339(),
+                modified: pipeline.modified.to_rfc3339(),
+            },
+            pipeline: pipeline.clone(),
+        }
+    }
+}
+```
+
+## Version history
+
+| Version | Changes |
+|---------|----------|
+| **1** | Initial format (current) |
+
+<Note>
+  Future versions may add fields but will maintain backward compatibility.
+  The loader will migrate older formats automatically.
+</Note>
+
+## Import formats
+
+IronBullet can import other config formats:
+
+| Format | Extension | Compatibility |
+|--------|-----------|---------------|
+| **RFX** (native) | `.rfx` | 100% - Full feature support |
+| **SilverBullet** | `.svb` | 95% - High compatibility |
+| **OpenBullet 2** | `.opk`, `.json` | 90% - Most features |
+| **LoliCode** | `.loli` | 85% - Text-based format |
+
+See [Importing Configs](/guides/importing-configs) for conversion guide.
+
+## Export formats
+
+IronBullet can export to:
+
+- **`.rfx`** - Native format (lossless)
+- **Standalone Rust** - Compiled binary (see [Export Code](/features/export-code))
+
+## Validation
+
+The config loader validates:
+- JSON syntax and structure
+- Required fields presence
+- UUID format (tolerates empty strings → nil UUID)
+- Enum variants (BlockType, ProxyMode, etc.)
+- Array types and nesting
+
+**Invalid configs will fail to load with a descriptive error.**
+
+## CLI usage
+
+Run configs from CLI:
+
+```bash
+ironbullet --config my_config.rfx --wordlist data.txt --threads 10
+```
+
+See [CLI Reference](/api/cli-commands) for all options.
+
+## See also
+
+<CardGroup cols={2}>
+  <Card title="Pipeline API" icon="diagram-project" href="/api/pipeline">
+    Pipeline structure documentation
+  </Card>
+  <Card title="Block settings" icon="cube" href="/api/block-settings">
+    Block-specific settings reference
+  </Card>
+  <Card title="Importing configs" icon="file-import" href="/guides/importing-configs">
+    Convert OpenBullet configs
+  </Card>
+</CardGroup>

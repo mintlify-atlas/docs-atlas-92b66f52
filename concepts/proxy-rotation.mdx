@@ -1,0 +1,620 @@
+---
+title: "Proxy Rotation"
+description: "Understanding proxy modes, health checking, ban detection, and retry logic"
+icon: "shuffle"
+---
+
+## Proxy System Overview
+
+IronBullet includes a sophisticated proxy rotation system with automatic ban detection, health checking, and multiple rotation modes. This allows you to distribute requests across many proxies to avoid rate limits and IP bans.
+
+<Note>
+Proxies are essential for high-volume checking. Without proxies, your IP will quickly get rate-limited or banned.
+</Note>
+
+## Proxy Settings Structure
+
+From `src/pipeline/mod.rs:83-112`:
+
+```rust
+pub struct ProxySettings {
+    pub proxy_mode: ProxyMode,
+    pub proxy_sources: Vec<ProxySource>,
+    pub ban_duration_secs: u64,
+    pub max_retries_before_ban: u32,
+    pub cpm_per_proxy: u32,             // CPM limit per proxy
+    pub proxy_groups: Vec<ProxyGroup>,   // Named proxy groups
+    pub active_group: String,            // Active group name
+}
+
+impl Default for ProxySettings {
+    fn default() -> Self {
+        Self {
+            proxy_mode: ProxyMode::None,
+            proxy_sources: Vec::new(),
+            ban_duration_secs: 300,      // 5 minutes
+            max_retries_before_ban: 3,
+            cpm_per_proxy: 0,
+            proxy_groups: Vec::new(),
+            active_group: String::new(),
+        }
+    }
+}
+```
+
+## Proxy Modes
+
+From `src/pipeline/mod.rs:123-132`:
+
+```rust
+pub enum ProxyMode {
+    None,       // No proxies (direct connection)
+    Rotate,     // Random proxy per request
+    Sticky,     // One proxy per data line (session persistence)
+    CpmLimited, // Limit checks-per-minute per proxy
+}
+```
+
+<CardGroup cols={2}>
+  <Card title="None" icon="xmark" color="gray">
+    **No proxies** - Direct connection to target.
+    
+    ```json
+    {
+      "proxy_mode": "None",
+      "proxy_sources": []
+    }
+    ```
+    
+    **Use when:**
+    - Testing locally
+    - Internal APIs without rate limits
+    - Single-threaded checking
+    
+    <Warning>Your IP will be visible and rate limits apply to your single IP.</Warning>
+  </Card>
+
+  <Card title="Rotate" icon="rotate" color="blue">
+    **Random proxy per request** - Each HTTP request uses a different proxy.
+    
+    ```json
+    {
+      "proxy_mode": "Rotate",
+      "proxy_sources": [...]
+    }
+    ```
+    
+    **Use when:**
+    - Maximum distribution needed
+    - No session persistence required
+    - Large proxy pool available
+    
+    <Tip>Best for simple checks where you don't need to maintain cookies/session across requests.</Tip>
+  </Card>
+
+  <Card title="Sticky" icon="thumbtack" color="green">
+    **One proxy per data line** - All requests for a credential use the same proxy.
+    
+    ```json
+    {
+      "proxy_mode": "Sticky",
+      "proxy_sources": [...]
+    }
+    ```
+    
+    **Use when:**
+    - Multi-step login flows
+    - Session/cookie persistence needed
+    - Target tracks IP per session
+    
+    <Tip>Essential for sites that require the same IP throughout a login flow.</Tip>
+  </Card>
+
+  <Card title="CpmLimited" icon="gauge" color="purple">
+    **Rate-limited rotation** - Limit checks per minute per proxy.
+    
+    ```json
+    {
+      "proxy_mode": "CpmLimited",
+      "cpm_per_proxy": 60,
+      "proxy_sources": [...]
+    }
+    ```
+    
+    **Use when:**
+    - Avoiding aggressive rate limits
+    - Preserving proxy health
+    - Controlled request rate needed
+    
+    <Tip>Set `cpm_per_proxy` based on target's rate limit (e.g., 60 = 1 request/second per proxy).</Tip>
+  </Card>
+</CardGroup>
+
+## Proxy Sources
+
+From `src/pipeline/mod.rs:134-152`:
+
+```rust
+pub struct ProxySource {
+    pub source_type: ProxySourceType,
+    pub value: String,
+    pub refresh_interval_secs: u64,      // Auto-refresh for URLs
+    pub default_proxy_type: Option<String>, // Http/Https/Socks4/Socks5
+}
+
+pub enum ProxySourceType {
+    File,    // Load from file
+    Url,     // Download from URL
+    Inline,  // Direct input
+}
+```
+
+<Tabs>
+  <Tab title="File Source">
+    Load proxies from a text file:
+    
+    ```json
+    {
+      "source_type": "File",
+      "value": "/path/to/proxies.txt",
+      "default_proxy_type": "Http"
+    }
+    ```
+    
+    **File format (proxies.txt):**
+    ```txt
+    http://proxy1.example.com:8080
+    http://user:pass@proxy2.example.com:3128
+    socks5://proxy3.example.com:1080
+    ```
+    
+    Or plain `host:port` (uses `default_proxy_type`):
+    ```txt
+    192.168.1.100:8080
+    proxy.example.com:3128
+    10.0.0.50:1080
+    ```
+  </Tab>
+
+  <Tab title="URL Source">
+    Download proxies from a URL (auto-refreshes):
+    
+    ```json
+    {
+      "source_type": "Url",
+      "value": "https://example.com/proxies.txt",
+      "refresh_interval_secs": 3600,
+      "default_proxy_type": "Http"
+    }
+    ```
+    
+    <Tip>Proxies are automatically re-downloaded every `refresh_interval_secs` to keep the pool fresh.</Tip>
+  </Tab>
+
+  <Tab title="Inline Source">
+    Paste proxies directly:
+    
+    ```json
+    {
+      "source_type": "Inline",
+      "value": "http://proxy1:8080\nhttp://user:pass@proxy2:3128\nsocks5://proxy3:1080",
+      "default_proxy_type": "Http"
+    }
+    ```
+    
+    Useful for testing with a few proxies.
+  </Tab>
+</Tabs>
+
+## Proxy Formats
+
+From `src/runner/proxy_pool.rs:123-165`, IronBullet supports multiple proxy formats:
+
+```rust
+fn parse_proxy_line(line: &str, default_type: Option<ProxyType>) -> Option<ProxyEntry>
+```
+
+<AccordionGroup>
+  <Accordion title="Full URL Format">
+    ```
+    http://proxy.example.com:8080
+    https://proxy.example.com:8443
+    socks4://proxy.example.com:1080
+    socks5://proxy.example.com:1080
+    ```
+    
+    Protocol is specified in the URL.
+  </Accordion>
+
+  <Accordion title="Host:Port Format">
+    ```
+    proxy.example.com:8080
+    192.168.1.100:3128
+    10.0.0.50:1080
+    ```
+    
+    Uses `default_proxy_type` from source settings.
+  </Accordion>
+
+  <Accordion title="Authenticated Format (2 parts)">
+    ```
+    host:port:username:password
+    ```
+    
+    Example:
+    ```
+    proxy.example.com:8080:myuser:mypass
+    ```
+    
+    Parsed as: `username:password@host:port`
+  </Accordion>
+
+  <Accordion title="Authenticated Format (5 parts)">
+    ```
+    protocol:host:port:username:password
+    ```
+    
+    Example:
+    ```
+    http:proxy.example.com:8080:myuser:mypass
+    socks5:10.0.0.50:1080:admin:secret
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Ban Detection and Health Checking
+
+From `src/runner/proxy_pool.rs:6-109`, the proxy pool automatically tracks proxy health:
+
+```rust
+pub struct ProxyPool {
+    proxies: Vec<ProxyEntry>,
+    index: AtomicUsize,
+    bans: RwLock<HashMap<String, Instant>>,
+    ban_duration_secs: u64,
+}
+
+impl ProxyPool {
+    pub fn next_proxy(&self) -> Option<String> {
+        // Try to find unbanned proxy
+        for i in 0..self.proxies.len() {
+            let proxy = &self.proxies[idx];
+            match bans.get(&proxy_str) {
+                Some(ban_time) if now - ban_time < ban_duration => {
+                    // Still banned - skip
+                }
+                _ => return Some(proxy_str),
+            }
+        }
+        // All banned - return anyway to keep working
+    }
+
+    pub fn ban_proxy(&self, proxy: &str) {
+        bans.insert(proxy.to_string(), Instant::now());
+    }
+}
+```
+
+### How Ban Detection Works
+
+```mermaid
+graph TD
+    A[Execute Request] --> B{Status?}
+    B -->|BotStatus::Ban| C[Increment Retry Count]
+    C --> D{Retries >= max_retries_before_ban?}
+    D -->|Yes| E[Mark Proxy as Banned]
+    D -->|No| F[Retry with Same/Different Proxy]
+    E --> G[Ban Duration Timer Starts]
+    G --> H{ban_duration_secs elapsed?}
+    H -->|Yes| I[Proxy Available Again]
+    H -->|No| J[Proxy Skipped]
+    B -->|Other Status| K[Continue Normal]
+```
+
+<Warning>
+When a KeyCheck block returns `BotStatus::Ban`, the proxy used for that request is marked for potential banning based on retry count.
+</Warning>
+
+## Retry Logic
+
+From `src/pipeline/mod.rs:173-233`, retry behavior is configurable:
+
+```rust
+pub struct RunnerSettings {
+    pub max_retries: u32,                      // Max retries per data line
+    pub continue_statuses: Vec<BotStatus>,     // Statuses that trigger retry
+    pub pause_on_ratelimit: bool,              // Pause when rate-limited
+}
+
+impl Default for RunnerSettings {
+    fn default() -> Self {
+        Self {
+            max_retries: 3,
+            continue_statuses: vec![BotStatus::Retry],
+            pause_on_ratelimit: false,
+        }
+    }
+}
+```
+
+### Example Configuration
+
+```json
+{
+  "proxy_settings": {
+    "proxy_mode": "Rotate",
+    "ban_duration_secs": 300,
+    "max_retries_before_ban": 3
+  },
+  "runner_settings": {
+    "max_retries": 5,
+    "continue_statuses": ["Retry", "Ban"]
+  }
+}
+```
+
+**Behavior:**
+1. Request fails with `Ban` status
+2. Retry count increments (1/5)
+3. After 3 Ban results, proxy marked as banned for 300 seconds
+4. New proxy selected
+5. Continues until max_retries (5) reached or Success/Fail
+
+## Proxy Groups
+
+From `src/pipeline/mod.rs:114-121`, you can define named proxy groups:
+
+```rust
+pub struct ProxyGroup {
+    pub name: String,
+    pub mode: ProxyMode,
+    pub sources: Vec<ProxySource>,
+    pub cpm_per_proxy: u32,
+}
+```
+
+Example configuration:
+
+```json
+{
+  "proxy_groups": [
+    {
+      "name": "premium",
+      "mode": "Sticky",
+      "sources": [
+        {
+          "source_type": "File",
+          "value": "premium-proxies.txt"
+        }
+      ],
+      "cpm_per_proxy": 120
+    },
+    {
+      "name": "cheap",
+      "mode": "Rotate",
+      "sources": [
+        {
+          "source_type": "Url",
+          "value": "https://freeproxy.example.com/list.txt",
+          "refresh_interval_secs": 600
+        }
+      ],
+      "cpm_per_proxy": 30
+    }
+  ],
+  "active_group": "premium"
+}
+```
+
+<Tip>
+Switch between proxy groups without editing the entire config by changing `active_group`.
+</Tip>
+
+## Concurrent Proxy Usage
+
+From `src/pipeline/mod.rs:188`:
+
+```rust
+pub concurrent_per_proxy: u32,  // Max concurrent uses per proxy (0 = unlimited)
+```
+
+Limit how many threads can use the same proxy simultaneously:
+
+```json
+{
+  "runner_settings": {
+    "threads": 1000,
+    "concurrent_per_proxy": 10
+  }
+}
+```
+
+With 100 proxies and `concurrent_per_proxy: 10`, max 1000 concurrent requests (100 × 10).
+
+## Monitoring Proxy Health
+
+From `src/runner/proxy_pool.rs:97-108`:
+
+```rust
+pub fn total(&self) -> usize {
+    self.proxies.len()
+}
+
+pub fn active(&self) -> usize {
+    let banned = bans.values()
+        .filter(|t| now - **t < ban_duration)
+        .count();
+    self.proxies.len() - banned
+}
+```
+
+You can monitor:
+- **Total proxies** loaded
+- **Active proxies** (not banned)
+- **Banned proxies** (temporarily unavailable)
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Proxy Quality" icon="star">
+    - Use residential/mobile proxies for aggressive targets
+    - Test proxy quality before large runs
+    - Remove dead proxies regularly
+    - Prefer authenticated proxies for reliability
+  </Card>
+
+  <Card title="Ban Management" icon="shield">
+    - Set `ban_duration_secs` based on target's timeout
+    - Increase `max_retries_before_ban` for unreliable proxies
+    - Monitor ban rate to adjust thread count
+    - Use larger proxy pools for high thread counts
+  </Card>
+
+  <Card title="Mode Selection" icon="sliders">
+    - Use **Sticky** for multi-step login flows
+    - Use **Rotate** for maximum distribution
+    - Use **CpmLimited** to preserve proxy health
+    - Use **None** only for testing
+  </Card>
+
+  <Card title="Performance" icon="gauge-high">
+    - More proxies = more threads possible
+    - Adjust `concurrent_per_proxy` based on proxy quality
+    - Use URL sources with auto-refresh for dynamic lists
+    - Balance thread count with proxy pool size
+  </Card>
+</CardGroup>
+
+## Common Patterns
+
+<AccordionGroup>
+  <Accordion title="Sticky Mode for Login">
+    ```json
+    {
+      "proxy_settings": {
+        "proxy_mode": "Sticky",
+        "proxy_sources": [
+          {
+            "source_type": "File",
+            "value": "residential-proxies.txt"
+          }
+        ],
+        "ban_duration_secs": 600,
+        "max_retries_before_ban": 5
+      }
+    }
+    ```
+    
+    Each credential gets its own proxy for the entire login flow.
+  </Accordion>
+
+  <Accordion title="Rotate Mode with Ban Detection">
+    ```json
+    {
+      "proxy_settings": {
+        "proxy_mode": "Rotate",
+        "ban_duration_secs": 300,
+        "max_retries_before_ban": 3
+      }
+    }
+    ```
+    
+    Plus KeyCheck to detect bans:
+    ```json
+    {
+      "block_type": "KeyCheck",
+      "settings": {
+        "keychains": [
+          {
+            "result": "Ban",
+            "conditions": [
+              { "source": "data.RESPONSECODE", "comparison": "EqualTo", "value": "429" },
+              { "source": "data.RESPONSECODE", "comparison": "EqualTo", "value": "403" }
+            ]
+          }
+        ]
+      }
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="CPM Limited for Gentle Checking">
+    ```json
+    {
+      "proxy_settings": {
+        "proxy_mode": "CpmLimited",
+        "cpm_per_proxy": 30,
+        "proxy_sources": [...]
+      },
+      "runner_settings": {
+        "threads": 100,
+        "concurrent_per_proxy": 1
+      }
+    }
+    ```
+    
+    Each proxy makes max 30 requests/minute, single request at a time.
+  </Accordion>
+</AccordionGroup>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="All proxies banned quickly">
+    **Problem:** Proxy pool exhausted within seconds.
+    
+    **Solutions:**
+    - Reduce thread count
+    - Increase `ban_duration_secs`
+    - Increase `max_retries_before_ban`
+    - Get more/better proxies
+    - Switch to CpmLimited mode
+    - Lower `concurrent_per_proxy`
+  </Accordion>
+
+  <Accordion title="Proxies not rotating">
+    **Problem:** Same proxy used repeatedly.
+    
+    **Solutions:**
+    - Check `proxy_mode` is Rotate, not Sticky
+    - Verify proxy file has multiple proxies
+    - Check for errors in proxy file format
+    - Ensure proxies are not all banned
+  </Accordion>
+
+  <Accordion title="Proxy authentication failing">
+    **Problem:** 407 Proxy Authentication Required.
+    
+    **Solutions:**
+    - Use format `http://user:pass@host:port`
+    - Or format `host:port:user:pass`
+    - Check username/password are correct
+    - URL-encode special characters in password
+  </Accordion>
+
+  <Accordion title="Performance degradation">
+    **Problem:** CPM drops over time.
+    
+    **Solutions:**
+    - Proxies getting banned - increase pool size
+    - Target rate limiting - reduce threads
+    - Proxy quality issues - test and filter
+    - Check ban detection logic in KeyCheck
+  </Accordion>
+</AccordionGroup>
+
+## Related Concepts
+
+<CardGroup cols={3}>
+  <Card title="Blocks" icon="cube" href="/concepts/blocks">
+    KeyCheck for ban detection
+  </Card>
+  
+  <Card title="Pipelines" icon="diagram-project" href="/concepts/pipelines">
+    Runner settings and retry logic
+  </Card>
+  
+  <Card title="Variables" icon="brackets-curly" href="/concepts/variables">
+    Checking response codes for bans
+  </Card>
+</CardGroup>

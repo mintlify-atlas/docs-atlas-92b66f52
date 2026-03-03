@@ -1,0 +1,355 @@
+---
+title: 'CLI Commands'
+description: 'Complete reference for IronBullet command-line interface'
+---
+
+## Overview
+
+IronBullet can run configurations headlessly from the terminal using CLI mode. This is useful for automation, CI/CD pipelines, and server environments.
+
+## CLI Mode Detection
+
+IronBullet automatically switches to CLI mode when any of these flags are present:
+- `--config` or `-c`
+- `--help` or `-h`
+
+When CLI mode is not detected, IronBullet launches the GUI application.
+
+**Source:** `main.rs:182-184`
+
+## Basic Usage
+
+```bash
+ironbullet --config <path> --wordlist <path> [options]
+```
+
+## Required Arguments
+
+<ParamField path="--config" type="string" required>
+  Path to the configuration file. Supports multiple formats:
+  - `.rfx` - IronBullet native format
+  - `.svb` - SilverBullet format
+  - `.opk` - OpenBullet format
+  - `.loli` - LoliCode format
+  - `.json` - JSON format
+
+  **Alias:** `-c`
+
+  **Example:**
+  ```bash
+  ironbullet --config config.rfx --wordlist combos.txt
+  ```
+</ParamField>
+
+<ParamField path="--wordlist" type="string" required>
+  Path to the wordlist or combo file to process.
+
+  **Alias:** `-w`
+
+  **Example:**
+  ```bash
+  ironbullet -c config.rfx -w combos.txt
+  ```
+</ParamField>
+
+## Optional Arguments
+
+<ParamField path="--threads" type="number">
+  Number of concurrent threads to use. Overrides the thread count specified in the config file.
+
+  **Alias:** `-t`
+
+  **Default:** Uses value from config file
+
+  **Example:**
+  ```bash
+  ironbullet -c config.rfx -w combos.txt --threads 50
+  ```
+</ParamField>
+
+<ParamField path="--proxies" type="string">
+  Path to proxy list file. Each proxy should be on a separate line.
+
+  **Alias:** `-p`
+
+  **Default:** No proxies (direct connection)
+
+  **Example:**
+  ```bash
+  ironbullet -c config.rfx -w combos.txt -p proxies.txt
+  ```
+</ParamField>
+
+<ParamField path="--outfile" type="string">
+  Output directory for saving hits and results.
+
+  **Alias:** `-o`
+
+  **Default:** `results/`
+
+  **Example:**
+  ```bash
+  ironbullet -c config.rfx -w combos.txt -o ./output/
+  ```
+</ParamField>
+
+<ParamField path="--skip" type="number">
+  Skip the first N lines from the wordlist. Useful for resuming interrupted runs.
+
+  **Default:** `0`
+
+  **Example:**
+  ```bash
+  # Skip first 1000 lines
+  ironbullet -c config.rfx -w combos.txt --skip 1000
+  ```
+</ParamField>
+
+<ParamField path="--take" type="number">
+  Process only N lines from the wordlist. Use `0` to process all lines.
+
+  **Default:** `0` (process all)
+
+  **Example:**
+  ```bash
+  # Process only 500 lines
+  ironbullet -c config.rfx -w combos.txt --take 500
+  ```
+
+  **Combined with --skip:**
+  ```bash
+  # Process lines 1000-1500
+  ironbullet -c config.rfx -w combos.txt --skip 1000 --take 500
+  ```
+</ParamField>
+
+<ParamField path="--debug" type="boolean">
+  Enable debug mode. Prints each block result to stderr for troubleshooting.
+
+  **Alias:** `-d`
+
+  **Default:** `false`
+
+  **Example:**
+  ```bash
+  ironbullet -c config.rfx -w combos.txt --debug
+  ```
+</ParamField>
+
+<ParamField path="--help" type="boolean">
+  Display help message with usage information and exit.
+
+  **Alias:** `-h`
+
+  **Example:**
+  ```bash
+  ironbullet --help
+  ```
+</ParamField>
+
+## Complete Examples
+
+### Basic Run
+
+```bash
+ironbullet --config myconfig.rfx --wordlist combos.txt
+```
+
+**Output:**
+```
+[*] loaded config: MyConfig (12 blocks)
+[*] wordlist: 10000 lines (skip=0, take=0)
+[*] starting with 20 threads
+[*] 1250/10000 | hits:15 fails:1200 errors:35 | cpm:3750.0 | threads:20
+[HIT] user@example.com:password123 | token=abc123xyz | balance=50.00
+[*] done in 160.5s — 10000 processed, 15 hits, 9800 fails, 185 errors
+[*] 15 hits printed to stdout
+```
+
+### High-Performance Run with Proxies
+
+```bash
+ironbullet -c config.rfx -w large-combos.txt -t 100 -p socks5-proxies.txt -o ./results/
+```
+
+**Output:**
+```
+[*] loaded config: StreamingService (8 blocks)
+[*] wordlist: 500000 lines (skip=0, take=0)
+[*] proxies: 250 loaded
+[*] starting with 100 threads
+[*] 125000/500000 | hits:342 fails:124500 errors:158 | cpm:15000.0 | threads:100
+[*] done in 2000.3s — 500000 processed, 1250 hits, 498500 fails, 250 errors
+[*] 1250 hits printed to stdout
+```
+
+### Resume from Line 5000
+
+```bash
+ironbullet -c config.rfx -w combos.txt --skip 5000
+```
+
+**Output:**
+```
+[*] loaded config: MyConfig (12 blocks)
+[*] wordlist: 5000 lines (skip=5000, take=0)
+[*] starting with 20 threads
+```
+
+### Test First 100 Lines
+
+```bash
+ironbullet -c config.rfx -w combos.txt --take 100 --debug
+```
+
+**Output:**
+```
+[*] loaded config: TestConfig (5 blocks)
+[*] wordlist: 100 lines (skip=0, take=100)
+[*] starting with 20 threads
+  proxy: socks5://127.0.0.1:9050
+[HIT] test@example.com:pass | captured_field=value
+  proxy: socks5://127.0.0.1:9050
+[*] done in 5.2s — 100 processed, 1 hits, 95 fails, 4 errors
+```
+
+### Import and Run SilverBullet Config
+
+```bash
+ironbullet --config legacy.svb --wordlist data.txt --threads 30
+```
+
+**Output:**
+```
+[warn] SilverBullet keycheck 'BAN' mapped to 'RETRY'
+[warn] Block 'ParseJson' uses legacy syntax
+[*] loaded config: ImportedConfig (15 blocks)
+[*] wordlist: 20000 lines (skip=0, take=0)
+[*] starting with 30 threads
+```
+
+## Exit Codes
+
+| Code | Meaning |
+|------|----------|
+| `0` | Success - run completed without errors |
+| `1` | Error - invalid arguments, config load failure, or runtime error |
+
+## Output Format
+
+### Status Line (Updates Every 3 Seconds)
+
+```
+[*] processed/total | hits:N fails:N errors:N | cpm:X.X | threads:N
+```
+
+- **processed/total:** Lines processed out of total wordlist size
+- **hits:** Number of successful hits
+- **fails:** Number of failed checks
+- **errors:** Number of runtime errors (network, parsing, etc.)
+- **cpm:** Checks per minute (throughput)
+- **threads:** Active worker threads
+
+### Hit Output
+
+```
+[HIT] data_line | capture1=value1 | capture2=value2
+```
+
+- **data_line:** Original line from wordlist
+- **captures:** Key-value pairs of captured variables (if any)
+
+### Debug Output (--debug flag)
+
+```
+  proxy: protocol://host:port
+```
+
+Shows the proxy used for each request when debug mode is enabled.
+
+## Configuration Overrides
+
+CLI arguments override config file settings in this order:
+
+1. **Threads:** `--threads` overrides `pipeline.runner_settings.threads`
+2. **Skip:** `--skip` overrides `pipeline.runner_settings.skip`
+3. **Take:** `--take` overrides `pipeline.runner_settings.take`
+4. **Output:** `--outfile` overrides `pipeline.output_settings.output_directory`
+
+**Source:** `cli.rs:147-165`
+
+## Error Messages
+
+### Missing Required Argument
+
+```bash
+$ ironbullet --config test.rfx
+error: --wordlist is required
+run with --help for usage
+```
+
+### Invalid Argument
+
+```bash
+$ ironbullet --config test.rfx --wordlist data.txt --unknown
+error: unknown argument: --unknown
+run with --help for usage
+```
+
+### Invalid Thread Count
+
+```bash
+$ ironbullet -c test.rfx -w data.txt --threads abc
+error: invalid thread count: abc
+run with --help for usage
+```
+
+### Config Load Failure
+
+```bash
+$ ironbullet -c missing.rfx -w data.txt
+error: failed to read missing.rfx: No such file or directory
+```
+
+### Wordlist Load Failure
+
+```bash
+$ ironbullet -c test.rfx -w missing.txt
+error: failed to load wordlist: No such file or directory
+```
+
+## Platform-Specific Notes
+
+### Windows Console Attachment
+
+On Windows, IronBullet automatically attaches to the parent console process to display CLI output. This is required because the application is compiled with `#![windows_subsystem = "windows"]` to hide the console in GUI mode.
+
+**Source:** `main.rs:186-198`
+
+### Linux/macOS
+
+No special console handling is required on Unix-like systems.
+
+## Performance Tips
+
+<Tip>
+  **Optimal Thread Count:** Start with 20-50 threads and increase based on your network capacity and target server response times. Too many threads can cause connection errors.
+</Tip>
+
+<Tip>
+  **Proxy Rotation:** Use `--proxies` with a large proxy list for better anonymity and to avoid rate limiting.
+</Tip>
+
+<Tip>
+  **Resume Interrupted Runs:** Use `--skip` to resume from where you left off. Track the "processed" count from the status line.
+</Tip>
+
+<Tip>
+  **Testing Configs:** Use `--take 100` to test your config on a small sample before running on the full wordlist.
+</Tip>
+
+## See Also
+
+- [CLI Options Reference](/api/cli-options) - Detailed flag documentation
+- [Pipeline API](/api/pipeline) - Pipeline structure and configuration
+- [Config Format](/api/config-format) - .rfx file format specification

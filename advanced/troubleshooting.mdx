@@ -1,0 +1,527 @@
+---
+title: 'Troubleshooting'
+description: 'Common issues, error messages, and debugging techniques'
+icon: 'wrench'
+---
+
+## Common Error Messages
+
+<AccordionGroup>
+<Accordion title='Error: Failed to send request to sidecar'>
+**Symptom**: Pipeline fails immediately with sidecar communication error.
+
+**Cause**: The Go sidecar process (`ironbullet-sidecar`) is not running or not responding.
+
+**Solution**:
+1. Check if the sidecar process is running:
+   ```bash
+   ps aux | grep ironbullet-sidecar
+   ```
+2. Restart IronBullet to auto-launch the sidecar
+3. Check sidecar logs for port conflicts (default: `:50051`)
+4. Verify firewall rules allow localhost gRPC traffic
+</Accordion>
+
+<Accordion title='Error: Proxy authentication failed'>
+**Symptom**: HTTP requests fail with 407 status or "proxy error".
+
+**Cause**: Proxy credentials are incorrect or proxy format is invalid.
+
+**Solution**:
+1. Verify proxy format in `proxies.txt`:
+   ```
+   # Correct formats:
+   http://user:pass@host:port
+   socks5://user:pass@host:port
+   host:port:user:pass
+   ```
+2. Test proxy manually:
+   ```bash
+   curl -x http://user:pass@proxy:port https://api.ipify.org
+   ```
+3. Check for special characters in password (URL-encode if needed)
+4. Try a different proxy from your list to isolate the issue
+</Accordion>
+
+<Accordion title='Error: Regex parse error'>
+**Symptom**: `ParseRegex` block fails with "invalid regex".
+
+**Cause**: Rust's regex syntax differs slightly from other languages (no lookahead/lookbehind).
+
+**Solution**:
+1. Test regex at [regex101.com](https://regex101.com) with Rust flavor
+2. Common fixes:
+   - Replace `(?=...)` lookahead with capturing groups
+   - Replace `(?<=...)` lookbehind with different pattern
+   - Escape special chars: `.` → `\.`, `*` → `\*`
+3. Use raw string in code: `r"pattern"` to avoid double-escaping
+4. Simplify pattern: `"token":(.*?)}`→`"token":"([^"]+)"`
+</Accordion>
+
+<Accordion title='Error: JSON pointer not found'>
+**Symptom**: `ParseJSON` returns empty string even though key exists.
+
+**Cause**: JSON path syntax mismatch or nested structure.
+
+**Solution**:
+1. Verify JSON structure with `jq`:
+   ```bash
+   echo '{"user":{"id":123}}' | jq '.user.id'
+   ```
+2. Use JSON pointer syntax (slash-separated):
+   - Dot notation: `user.id`
+   - Pointer: `/user/id`
+3. Check for array indices:
+   - `items[0].name` → `/items/0/name`
+4. Log the raw response to verify structure:
+   ```yaml
+   - type: Log
+     message: "Raw: <SOURCE>"
+   ```
+</Accordion>
+
+<Accordion title='Error: SSL certificate verify failed'>
+**Symptom**: HTTPS requests fail with TLS/SSL error.
+
+**Cause**: Self-signed cert, expired cert, or strict TLS validation.
+
+**Solution**:
+1. **Temporary fix**: Disable SSL verification in HttpRequest block:
+   ```yaml
+   ssl_verify: false
+   ```
+2. **Production fix**: Install root CA certificate
+3. For corporate proxies with SSL interception:
+   - Import proxy's CA cert into system trust store
+   - Or use `tls_client: RustTLS` (more permissive)
+</Accordion>
+
+<Accordion title='Warning: Thread pool starvation (CPM = 0)'>
+**Symptom**: Runner starts but CPM stays at 0, no credentials processed.
+
+**Cause**: All worker threads are blocked or deadlocked.
+
+**Solution**:
+1. Check for infinite loops in IfElse/Loop blocks
+2. Verify data pool has credentials:
+   ```yaml
+   data_settings:
+     path: "data.txt"  # Must exist and be non-empty
+   ```
+3. Check thread count > 0 in runner settings
+4. Review logs for panic messages from workers
+5. Restart with gradual thread start:
+   ```yaml
+   runner_settings:
+     start_threads_gradually: true
+     gradual_delay_ms: 50
+   ```
+</Accordion>
+
+<Accordion title='Error: Variable not found: <varname>'>
+**Symptom**: Block fails because input variable doesn't exist.
+
+**Cause**: Variable was never set or typo in variable name.
+
+**Solution**:
+1. Check variable naming (case-sensitive):
+   - `SOURCE` ≠ `source`
+   - Use Debug mode to inspect `variables_after` in block results
+2. Ensure variable is set before use:
+   ```yaml
+   - type: SetVariable
+     name: token
+     value: "default-value"
+   - type: ParseJSON  # Now 'token' exists
+     input_var: token
+   ```
+3. Use default values in parsing blocks to avoid errors
+4. Enable safe mode on non-critical blocks
+</Accordion>
+
+<Accordion title='Error: ChromiumOxide browser launch failed'>
+**Symptom**: `BrowserOpen` block fails with "cannot find chrome executable".
+
+**Cause**: Chrome/Chromium not installed or not in PATH.
+
+**Solution**:
+1. Install Chrome/Chromium:
+   ```bash
+   # Ubuntu/Debian
+   sudo apt install chromium-browser
+   
+   # macOS
+   brew install --cask google-chrome
+   
+   # Windows
+   # Download from google.com/chrome
+   ```
+2. Set `CHROME_PATH` environment variable:
+   ```bash
+   export CHROME_PATH=/usr/bin/chromium
+   ```
+3. For headless servers, install dependencies:
+   ```bash
+   sudo apt install -y libnss3 libatk-bridge2.0-0 libx11-xcb1
+   ```
+4. Use `--no-sandbox` flag in Docker:
+   ```yaml
+   browser_settings:
+     args: ["--no-sandbox", "--disable-dev-shm-usage"]
+   ```
+</Accordion>
+</AccordionGroup>
+
+## Debugging Techniques
+
+### 1. Enable Debug Mode
+
+Debug mode captures full execution context:
+
+```rust src/pipeline/engine/mod.rs
+pub struct BlockResult {
+    pub block_id: Uuid,
+    pub block_label: String,
+    pub success: bool,
+    pub timing_ms: u64,
+    pub variables_after: HashMap<String, String>,  // All vars after block
+    pub log_message: String,
+    pub request: Option<RequestInfo>,   // HTTP request details
+    pub response: Option<ResponseInfo>, // Full response
+}
+```
+
+**Usage**:
+1. Run pipeline in test mode with 1 credential
+2. Inspect `block_results` to see variable state after each block
+3. Check `network_log` for HTTP timing and cookies
+4. Review `log` for error messages
+
+### 2. Isolate Failing Blocks
+
+Bisect the pipeline to find the problematic block:
+
+1. Disable half the blocks
+2. Run again — does it still fail?
+3. If yes, the issue is in the enabled half
+4. If no, the issue is in the disabled half
+5. Repeat until you find the exact block
+
+<Tip>
+Use the **disabled** checkbox in the UI rather than deleting blocks.
+</Tip>
+
+### 3. Log Variable State
+
+Insert Log blocks to trace variable values:
+
+```yaml
+blocks:
+  - type: ParseJSON
+    json_path: ".token"
+    output_var: auth_token
+  
+  - type: Log
+    message: "Token: <auth_token>"  # Interpolated at runtime
+  
+  - type: HttpRequest
+    headers:
+      Authorization: "Bearer <auth_token>"
+```
+
+### 4. Safe Mode for Non-Critical Blocks
+
+Prevent one block's error from halting the entire pipeline:
+
+```yaml
+blocks:
+  - type: ParseJSON
+    json_path: ".optional_field"
+    safe_mode: true  # Error → log warning, continue execution
+```
+
+**When to use**:
+- Parsing optional response fields
+- Bonus data extraction (balance, expiry, etc.)
+- Non-essential logging/webhooks
+
+**When NOT to use**:
+- Authentication tokens (pipeline can't proceed without them)
+- KeyCheck blocks (defeats purpose of validation)
+
+### 5. Proxy Testing
+
+Isolate proxy issues from pipeline logic:
+
+```bash
+# Test proxy directly
+curl -x http://user:pass@proxy:8080 -I https://httpbin.org/ip
+
+# Expected: 200 OK + your proxy's IP in response
+```
+
+If curl works but IronBullet doesn't:
+1. Check proxy format in `proxies.txt`
+2. Verify `proxy_mode` setting (None/Sticky/Rotate)
+3. Review sidecar logs for proxy errors
+
+### 6. Network Log Analysis
+
+The `network_log` tracks every HTTP request:
+
+```rust src/pipeline/engine/mod.rs
+pub struct NetworkEntry {
+    pub block_label: String,
+    pub method: String,
+    pub url: String,
+    pub status_code: u16,
+    pub timing_ms: u64,        // Latency
+    pub response_size: usize,
+    pub cookies_set: Vec<(String, String)>,
+    pub cookies_sent: Vec<(String, String)>,
+}
+```
+
+**Red flags**:
+- `timing_ms > 5000`: Slow proxy or rate limiting
+- `status_code = 403/429`: IP banned or rate limited
+- `cookies_set` empty when expected: Check response headers
+- `response_size = 0`: Server returned empty body
+
+### 7. Variable Store Inspection
+
+```rust src/pipeline/variable.rs
+impl VariableStore {
+    pub fn snapshot(&self) -> HashMap<String, String> {
+        // Returns all variables at current state
+    }
+}
+```
+
+After each block, `variables_after` contains the full variable map. Look for:
+- Missing expected variables
+- Variables with wrong values (empty, truncated, etc.)
+- Variable name typos (`token` vs `Token`)
+
+## Performance Debugging
+
+### High Latency
+
+**Symptom**: CPM < 60, each check takes > 1 second.
+
+**Diagnosis**:
+```rust
+// Check block_results[].timing_ms
+for result in &ctx.block_results {
+    if result.timing_ms > 1000 {
+        println!("Slow block: {} ({}ms)", result.block_label, result.timing_ms);
+    }
+}
+```
+
+**Common causes**:
+- Slow proxies (avg > 500ms)
+- Complex regex (> 100ms for large inputs)
+- Unoptimized CSS selectors (too broad)
+- Network timeouts (increase `timeout_ms`)
+
+### Low CPM
+
+**Symptom**: CPM plateaus far below expected.
+
+**Diagnosis**:
+1. Check `active_threads` — should match configured thread count
+2. If < configured, workers are crashing:
+   ```bash
+   tail -f ironbullet.log | grep panic
+   ```
+3. If = configured but CPM low:
+   - I/O bound: increase thread count
+   - Rate limited: reduce thread count, add proxies
+   - CPU bound: optimize parse blocks
+
+### Memory Leaks
+
+**Symptom**: RAM usage grows over time, eventually OOM.
+
+**Diagnosis**:
+1. Check result feed size (default: 100 entries)
+2. Disable response body capture in `BlockResult`:
+   ```rust
+   // In execute_http_request:
+   last.response = None;  // Don't store 1MB HTML responses
+   ```
+3. Use `safe_mode` to skip error logging of large responses
+4. Clear browser instances after each credential:
+   ```yaml
+   - type: BrowserOpen
+   - type: NavigateTo
+     url: "..."
+   # Browser auto-closed at end of pipeline
+   ```
+
+## Build Errors
+
+<AccordionGroup>
+<Accordion title='Error: linker `cc` not found'>
+**Cause**: C compiler not installed (required for some dependencies).
+
+**Solution**:
+```bash
+# Ubuntu/Debian
+sudo apt install build-essential
+
+# macOS
+xcode-select --install
+
+# Windows
+# Install Visual Studio Build Tools
+```
+</Accordion>
+
+<Accordion title='Error: failed to fetch crate from registry'>
+**Cause**: Network issue or crates.io outage.
+
+**Solution**:
+1. Check internet connection
+2. Retry build (transient network error)
+3. Use mirror registry:
+   ```toml
+   # .cargo/config.toml
+   [source.crates-io]
+   replace-with = "mirror"
+   
+   [source.mirror]
+   registry = "https://mirrors.tuna.tsinghua.edu.cn/git/crates.io-index.git"
+   ```
+</Accordion>
+
+<Accordion title='Error: cannot find type `Pipeline` in this scope'>
+**Cause**: Outdated or incompatible crate versions.
+
+**Solution**:
+```bash
+cargo clean
+cargo update
+cargo build --release
+```
+</Accordion>
+</AccordionGroup>
+
+## Runtime Panics
+
+### Panic: Index out of bounds
+
+**Stack trace**:
+```
+thread 'tokio-runtime-worker' panicked at 'index out of bounds: len is 0, index is 0'
+```
+
+**Cause**: Accessing empty Vec/array without checking length.
+
+**Solution**: Enable safe mode on parsing blocks or add validation:
+```yaml
+- type: Parse
+  parse_mode: Regex
+  pattern: "token=([^&]+)"
+  safe_mode: true  # Return empty string instead of panic
+```
+
+### Panic: Unwrap on None
+
+**Stack trace**:
+```
+panicked at 'called `Option::unwrap()` on a `None` value'
+```
+
+**Cause**: Variable doesn't exist or response missing expected field.
+
+**Solution**: Use `unwrap_or_default()` or validate before use:
+```rust
+let token = ctx.variables.get("token")
+    .ok_or_else(|| AppError::Pipeline("Token not found".into()))?;
+```
+
+## Getting Help
+
+<Steps>
+<Step title="Gather diagnostics">
+1. Pipeline config file (`.ib` or YAML)
+2. Error message + stack trace
+3. IronBullet version: `ironbullet --version`
+4. OS + architecture: `uname -a`
+5. Minimal reproduction (smallest pipeline that triggers the bug)
+</Step>
+
+<Step title="Search existing issues">
+Check [GitHub Issues](https://github.com/openbullet/ironbullet/issues) for similar reports.
+</Step>
+
+<Step title="Join the community">
+- **Discord**: [discord.gg/openbullet](https://discord.gg/openbullet)
+- **Forum**: [openbullet.com/forum](https://openbullet.com/forum)
+</Step>
+
+<Step title="File a bug report">
+If no existing issue matches, create a new one with:
+- Clear title: "ParseJSON fails on nested arrays"
+- Steps to reproduce
+- Expected vs actual behavior
+- Diagnostics from Step 1
+</Step>
+</Steps>
+
+<Warning>
+**Security note**: Redact credentials, API keys, and sensitive data from logs before sharing.
+</Warning>
+
+## Advanced Debugging Tools
+
+### Tokio Console
+
+Profile async task performance:
+
+```bash
+cargo install tokio-console
+tokio-console
+```
+
+Add to `Cargo.toml`:
+```toml
+[dependencies]
+console-subscriber = "0.2"
+
+[profile.dev]
+opt-level = 1  # Enable some optimizations for faster debugging
+```
+
+Shows:
+- Task spawn/completion times
+- Async lock contention
+- Tokio runtime metrics
+
+### Flamegraph Profiling
+
+Find CPU hotspots:
+
+```bash
+cargo install flamegraph
+sudo cargo flamegraph -- ironbullet run pipeline.ib
+```
+
+Open `flamegraph.svg` to see which functions consume the most CPU time.
+
+### Memory Profiling
+
+Detect memory leaks with Valgrind:
+
+```bash
+valgrind --leak-check=full --track-origins=yes ./target/debug/ironbullet
+```
+
+Or use `heaptrack` for detailed allocation traces:
+
+```bash
+heaptrack ./target/release/ironbullet run pipeline.ib
+heaptrack_gui heaptrack.*.gz
+```

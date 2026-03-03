@@ -1,0 +1,214 @@
+---
+title: 'Build Your First Pipeline'
+description: 'Complete walkthrough: add blocks, configure, test, and run your first credential checking pipeline'
+---
+
+This guide walks you through creating a complete credential checking pipeline from scratch. You'll learn how to add blocks, configure settings, test with debug mode, and run against a full wordlist.
+
+## What You'll Build
+
+A login checker that:
+- Sends HTTP POST requests with credentials
+- Parses JSON responses
+- Uses KeyCheck to classify results as Success/Fail
+- Captures user data from successful logins
+
+<Steps>
+  <Step title="Launch IronBullet">
+    Start IronBullet and create a new config. You'll see:
+    - **Block Palette** (left) - drag blocks from here
+    - **Canvas** (center) - your pipeline workspace
+    - **Block Settings** (right) - configure the selected block
+    - **Footer** - data/proxy/browser settings
+  </Step>
+
+  <Step title="Configure Data Settings">
+    Click the **Data** tab in the footer panel.
+
+    Set up your input format:
+    ```
+    Wordlist Type: Credentials
+    Separator: :
+    Slices: USER, PASS
+    ```
+
+    This tells IronBullet to split each line like `user@example.com:password123` into two variables: `<input.USER>` and `<input.PASS>`.
+  </Step>
+
+  <Step title="Add HTTP Request Block">
+    Drag **HttpRequest** from the palette to the canvas.
+
+    Configure the block (right panel):
+    ```json
+    Label: Login Request
+    Method: POST
+    URL: https://httpbin.org/post
+    ```
+
+    Add headers by clicking **+ Add Header**:
+    ```
+    Content-Type: application/json
+    Accept: application/json
+    ```
+
+    Set the request body:
+    ```json
+    {"email":"<input.USER>","password":"<input.PASS>"}
+    ```
+
+    The `<input.USER>` and `<input.PASS>` variables will be replaced with values from your wordlist.
+  </Step>
+
+  <Step title="Add ParseJSON Block">
+    Drag **ParseJSON** from the palette below your HTTP block.
+
+    Configure:
+    ```
+    Label: Extract Email
+    JSON Path: json.email
+    Output Variable: EMAIL
+    Capture: ✓ (checked)
+    ```
+
+    This extracts the email from the response and saves it as a capture (which will be saved in your hits file).
+  </Step>
+
+  <Step title="Add KeyCheck Block">
+    Drag **KeyCheck** to the canvas.
+
+    Click **+ Add Keychain** and configure the first keychain:
+    ```
+    Result: Success
+    Mode: AND
+    ```
+
+    Add a condition:
+    ```
+    Source: data.RESPONSECODE
+    Comparison: EqualTo
+    Value: 200
+    ```
+
+    Add a second keychain for failures:
+    ```
+    Result: Fail
+    Condition:
+      Source: data.RESPONSECODE
+      Comparison: EqualTo
+      Value: 401
+    ```
+
+    KeyCheck evaluates conditions top-to-bottom and stops at the first match.
+  </Step>
+
+  <Step title="Test with Debug Mode">
+    Press **F5** or click the **Debug** button (top toolbar).
+
+    Enter test data in the dialog:
+    ```
+    test@example.com:testpass123
+    ```
+
+    Click **Run Debug**. You'll see:
+    - **Blocks Panel** - execution flow with timing
+    - **Variables Panel** - all variables at each step
+    - **Request/Response Viewer** - full HTTP details
+    - **Network Log** - request timeline
+
+    Verify the pipeline works as expected before running on a full dataset.
+  </Step>
+
+  <Step title="Create a Wordlist">
+    Create a text file `combos.txt` with one credential per line:
+    ```
+    user1@example.com:password1
+    user2@example.com:password2
+    admin@test.com:admin123
+    ```
+
+    Each line will be split into `<input.USER>` and `<input.PASS>` based on your separator (`:`).
+  </Step>
+
+  <Step title="Configure Runner Settings">
+    Click the **Runner** tab in the footer.
+
+    Set:
+    ```
+    Threads: 100
+    Skip: 0
+    Take: 0 (process all lines)
+    Continue Statuses: Retry
+    Max Retries: 3
+    ```
+
+    Higher thread counts = faster execution, but may trigger rate limiting.
+  </Step>
+
+  <Step title="Create and Start a Job">
+    Click **Jobs** in the top toolbar.
+
+    Click **+ New Job** and configure:
+    ```
+    Job Name: Login Checker
+    Config: (your current config)
+    Wordlist: combos.txt
+    Threads: 100
+    ```
+
+    Click **Start Job**.
+
+    Monitor progress in real-time:
+    - **CPM** (checks per minute)
+    - **Hit rate**
+    - **Active threads**
+    - **Progress percentage**
+  </Step>
+
+  <Step title="View Results">
+    Results are saved automatically to `results/` directory:
+    ```
+    results/
+      Success.txt    - Valid credentials
+      Fail.txt       - Invalid credentials
+      Error.txt      - Errors/timeouts
+    ```
+
+    Each hit includes the original data line and any captures:
+    ```
+    admin@test.com:admin123 | EMAIL=admin@test.com
+    ```
+
+    Click **View Hits** in the Jobs panel to see results in the UI.
+  </Step>
+</Steps>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Credential Checking" icon="key" href="/guides/credential-checking">
+    Deep dive into KeyCheck patterns for login validation
+  </Card>
+  <Card title="Working with Proxies" icon="network-wired" href="/guides/working-with-proxies">
+    Add proxy rotation to avoid rate limits and bans
+  </Card>
+  <Card title="Import OpenBullet Configs" icon="file-import" href="/guides/importing-configs">
+    Convert existing .svb, .opk, .loli configs
+  </Card>
+  <Card title="Browser Automation" icon="browser" href="/guides/browser-automation">
+    Handle JavaScript-heavy sites with headless Chrome
+  </Card>
+</CardGroup>
+
+## Tips
+
+<Tip>
+  Use **Ctrl+S** to save your config frequently. Configs are saved as `.rfx` files (JSON format).
+</Tip>
+
+<Warning>
+  Always test with debug mode (F5) before running on a full wordlist. This helps catch configuration errors early.
+</Warning>
+
+<Note>
+  The `data.SOURCE` variable contains the full HTTP response body. `data.RESPONSECODE` contains the status code (200, 404, etc.).
+</Note>

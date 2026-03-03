@@ -1,80 +1,339 @@
 ---
-title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+title: 'Quick Start'
+description: 'Create your first pipeline in minutes'
 ---
 
-## Get started in three steps
+## Your First Pipeline
 
-Get your documentation site running locally and make your first customization.
-
-### Step 1: Set up your local environment
-
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
-    
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
-    
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
-
-### Step 2: Deploy your changes
-
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
-    
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
-
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
-
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
-
-### Step 3: Go live
-
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
-
-## Next steps
-
-Now that you have your docs running, explore these key features:
-
-<CardGroup cols={2}>
-
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
-
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
-
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
-
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
-
-</CardGroup>
+This guide walks you through creating a simple HTTP automation pipeline in IronBullet. You'll learn the core workflow and be able to build more complex pipelines afterward.
 
 <Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
+Make sure you've [installed IronBullet](/installation) before continuing.
 </Note>
+
+## Understanding the Interface
+
+When you launch IronBullet, you'll see three main areas:
+
+- **Left Panel**: Block palette with 50+ blocks organized by category
+- **Center Canvas**: Visual pipeline editor where you drag and connect blocks
+- **Right Panel**: Block configuration settings
+
+## Creating a Simple HTTP Pipeline
+
+Let's create a pipeline that makes an HTTP request and extracts data from the response.
+
+<Steps>
+  <Step title="Launch IronBullet">
+    Start the application:
+
+    **Windows**: Double-click `ironbullet.exe`
+
+    **Linux**: Run `./start.sh` or `./ironbullet`
+  </Step>
+
+  <Step title="Add an HTTP Request Block">
+    1. In the left panel, expand the **HTTP** category
+    2. Drag the **HTTP Request** block onto the canvas
+    3. Click the block to select it
+    4. In the right panel, configure:
+       - **URL**: `https://api.github.com/users/octocat`
+       - **Method**: `GET`
+       - **User-Agent**: `IronBullet/0.2.3`
+
+    <Tip>
+    The variable input system supports three modes:
+    - **RAW**: Use the literal value as-is
+    - **EMBED**: Embed variables with `<variable>` or `{{variable}}` syntax
+    - **VAR**: Reference a variable directly
+    </Tip>
+  </Step>
+
+  <Step title="Add a JSON Parser Block">
+    1. Expand the **Parsing** category in the left panel
+    2. Drag a **JSON** parsing block onto the canvas
+    3. Connect the HTTP Request block output to the JSON parser input
+    4. Configure the JSON parser:
+       - **JSON Path**: `$.name` (extracts the "name" field)
+       - **Variable Name**: `username`
+       - **Input Source**: Response body
+  </Step>
+
+  <Step title="Add a Log Block">
+    1. Expand the **Utilities** category
+    2. Drag a **Log** block onto the canvas
+    3. Connect the JSON parser output to the Log block
+    4. Configure the log block:
+       - **Message**: `Found username: <username>`
+       - **Log Level**: `INFO`
+
+    The `<username>` syntax will be replaced with the extracted variable.
+  </Step>
+</Steps>
+
+## Testing Your Pipeline
+
+<Steps>
+  <Step title="Enter Debug Mode">
+    Press **F5** or click the Debug button in the toolbar.
+
+    Debug mode allows you to test your pipeline with sample data before running it against full datasets.
+  </Step>
+
+  <Step title="View the Results">
+    The debugger panel will show:
+    - HTTP request details (URL, headers, method)
+    - Response status code and headers
+    - Response body
+    - Extracted variables
+    - Log output
+
+    You should see:
+    ```
+    Found username: The Octocat
+    ```
+  </Step>
+
+  <Step title="Inspect Variables">
+    Open the **Variables** panel to see all extracted variables and their values:
+    - `username`: "The Octocat"
+    - Any other variables created during execution
+  </Step>
+</Steps>
+
+## Running Against Datasets
+
+Once your pipeline works in debug mode, you can run it against full datasets.
+
+<Steps>
+  <Step title="Create a Job">
+    1. Click the **Jobs** button in the toolbar
+    2. Click **New Job**
+    3. Configure:
+       - **Name**: "GitHub User Checker"
+       - **Pipeline**: Select your current pipeline
+       - **Data Source**: Choose a data file or enter test data
+       - **Threads**: 5 (adjust based on your needs)
+  </Step>
+
+  <Step title="Add Input Data">
+    IronBullet supports multiple data formats:
+    - **List**: One item per line
+    - **CSV**: Comma-separated values with headers
+    - **JSON**: Array of objects
+
+    For this example, you could create a list of GitHub usernames:
+    ```
+    octocat
+    torvalds
+    gvanrossum
+    ```
+
+    Then modify your HTTP URL to use the input:
+    ```
+    https://api.github.com/users/<input>
+    ```
+  </Step>
+
+  <Step title="Start the Job">
+    Click **Start** to begin execution.
+
+    Monitor progress in the Jobs panel:
+    - Items processed
+    - Success/failure counts
+    - Execution time
+    - Results preview
+  </Step>
+
+  <Step title="Export Results">
+    After completion, export results in various formats:
+    - CSV
+    - JSON
+    - TXT
+
+    Results include all extracted variables and their values for each input.
+  </Step>
+</Steps>
+
+## Essential Keyboard Shortcuts
+
+- **F5**: Debug current pipeline with test data
+- **Ctrl+S**: Save pipeline
+- **Ctrl+N**: New pipeline
+- **Ctrl+O**: Open pipeline
+- **Delete**: Remove selected block
+
+## Block Categories Overview
+
+Now that you've created a basic pipeline, explore these block categories:
+
+### HTTP
+Make HTTP/HTTPS requests with full control over:
+- Methods (GET, POST, PUT, DELETE, PATCH, etc.)
+- Headers and cookies
+- Authentication (Basic, Bearer, custom)
+- Request bodies (JSON, form data, raw)
+- Proxy support
+
+### Parsing
+Extract data from responses:
+- **JSON**: JSONPath expressions
+- **Regex**: Pattern matching with capture groups
+- **CSS Selector**: Query HTML with CSS selectors
+- **XPath**: XML/HTML querying
+
+### Functions
+Transform and manipulate data:
+- **String**: Concatenate, substring, replace, encode/decode
+- **List**: Split, join, filter, map
+- **Crypto**: Hash (MD5, SHA1, SHA256), HMAC, AES encryption
+- **Math**: Arithmetic operations, random numbers
+- **Time**: Date/time parsing, formatting, timezone conversion
+
+### Control Flow
+Build complex logic:
+- **IfElse**: Conditional branching
+- **Loop**: Iterate over lists or ranges
+- **Set Variable**: Create and update variables
+- **Delay**: Add pauses between requests
+
+### Browser Automation
+Control browsers with Selenium:
+- Navigate to URLs
+- Click elements, fill forms
+- Execute JavaScript
+- Take screenshots
+- Handle popups and frames
+
+### Protocols
+Work with other protocols:
+- **TCP/UDP**: Raw socket communication
+- **FTP**: File transfers
+- **SSH**: Remote command execution
+- **IMAP/SMTP**: Email automation
+
+### Bypass
+Handle anti-automation measures:
+- **Captcha**: Integration with solving services
+- **Cloudflare**: Bypass Cloudflare protection
+- **CSRF Token**: Extract and use CSRF tokens
+
+### Utilities
+- **Log**: Debug output
+- **Script**: Execute custom JavaScript/Python
+- **Plugin**: Load external plugins
+
+## Advanced Features
+
+### Variable System
+
+IronBullet supports two variable syntaxes:
+
+```
+<variable>     # Angle bracket syntax
+{{variable}}   # Double curly brace syntax
+```
+
+Use variables in:
+- URLs: `https://api.example.com/users/<userId>`
+- Headers: `Authorization: Bearer <token>`
+- Request bodies: `{"username": "<username>"}`
+- Log messages: `User <username> logged in`
+
+### Proxy Rotation
+
+Configure proxy lists with automatic rotation:
+1. Add proxies in the **Data/Proxy** panel
+2. Enable proxy rotation in HTTP blocks
+3. IronBullet handles ban detection and health checking
+
+### Export as Code
+
+Export your pipeline as standalone Rust code:
+1. Click **Export** in the toolbar
+2. Select **Export as Rust Code**
+3. Customize and compile the generated code
+
+### Import OpenBullet Configs
+
+Migrate from OpenBullet:
+1. Click **Import** in the toolbar
+2. Select your OpenBullet config (.svb, .opk, or .loliScript)
+3. IronBullet will convert it to blocks automatically
+
+<Warning>
+Some OpenBullet features may require manual adjustments after import.
+</Warning>
+
+## Example: Login Flow
+
+Here's a more complex example showing a multi-step authentication flow:
+
+<Steps>
+  <Step title="Get CSRF Token">
+    1. HTTP GET to login page
+    2. CSS Selector to extract CSRF token from form
+    3. Store in `csrf_token` variable
+  </Step>
+
+  <Step title="Submit Login">
+    1. HTTP POST to login endpoint
+    2. Request body:
+       ```json
+       {
+         "username": "<input.username>",
+         "password": "<input.password>",
+         "csrf_token": "<csrf_token>"
+       }
+       ```
+    3. Parse response for session cookie
+  </Step>
+
+  <Step title="Verify Login">
+    1. HTTP GET to protected page
+    2. Check for success indicators
+    3. Log result: `Login <status> for <input.username>`
+  </Step>
+</Steps>
+
+## Troubleshooting
+
+### Pipeline Not Executing
+
+- Check that all blocks are connected properly
+- Verify input data is in the correct format
+- Look for error messages in the debugger panel
+
+### Variables Not Resolving
+
+- Ensure variable names match exactly (case-sensitive)
+- Check that variables are created before they're used
+- Use the Variables panel to see all available variables
+
+### HTTP Requests Failing
+
+- Verify the URL is correct and accessible
+- Check headers and authentication
+- Review proxy settings if using proxies
+- Use the Network panel to inspect full request/response details
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Block Reference" icon="blocks">
+    Explore all 50+ blocks and their configuration options
+  </Card>
+  <Card title="Variable System" icon="code">
+    Master the variable input system and data flow
+  </Card>
+  <Card title="Jobs & Execution" icon="play">
+    Learn advanced job configuration and optimization
+  </Card>
+  <Card title="Plugins" icon="puzzle-piece">
+    Extend IronBullet with custom plugins
+  </Card>
+</CardGroup>
+
+<Tip>
+Join the community on GitHub to share pipelines, get help, and request features: [github.com/ZeraTS/ironbullet](https://github.com/ZeraTS/ironbullet)
+</Tip>

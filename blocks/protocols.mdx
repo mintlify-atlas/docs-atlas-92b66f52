@@ -1,0 +1,479 @@
+---
+title: 'Protocol Request Blocks'
+description: 'TCP, UDP, FTP, SSH, IMAP, SMTP, and POP3 protocol handlers'
+---
+
+## Overview
+
+Protocol blocks enable communication using various network protocols beyond HTTP:
+
+- **TCP/UDP**: Raw socket communication
+- **FTP**: File transfer operations
+- **SSH**: Remote command execution
+- **IMAP**: Email retrieval via IMAP
+- **SMTP**: Email sending
+- **POP3**: Email retrieval via POP3
+
+## TcpRequest
+
+Send data over TCP sockets.
+
+### Settings
+
+<ParamField path="host" type="string" required>
+  Target host (IP or domain)
+</ParamField>
+
+<ParamField path="port" type="number" default="80" required>
+  TCP port number
+</ParamField>
+
+<ParamField path="data" type="string" required>
+  Data to send (supports variable interpolation)
+</ParamField>
+
+<ParamField path="output_var" type="string" default="TCP_RESPONSE">
+  Variable name to store response
+</ParamField>
+
+<ParamField path="timeout_ms" type="number" default="5000">
+  Connection timeout in milliseconds
+</ParamField>
+
+<ParamField path="use_tls" type="boolean" default="false">
+  Use TLS/SSL encryption
+</ParamField>
+
+<ParamField path="ssl_verify" type="boolean" default="true">
+  Verify SSL certificates (when use_tls is true)
+</ParamField>
+
+<ParamField path="capture" type="boolean" default="false">
+  Capture as user-visible variable
+</ParamField>
+
+### Example
+
+```json
+{
+  "block_type": "TcpRequest",
+  "label": "Custom Protocol",
+  "settings": {
+    "type": "TcpRequest",
+    "host": "api.example.com",
+    "port": 9000,
+    "data": "HELLO <input.USER>\\r\\n",
+    "use_tls": true
+  }
+}
+```
+
+## UdpRequest
+
+Send UDP datagrams.
+
+### Settings
+
+<ParamField path="host" type="string" required>
+  Target host (IP or domain)
+</ParamField>
+
+<ParamField path="port" type="number" default="53" required>
+  UDP port number
+</ParamField>
+
+<ParamField path="data" type="string" required>
+  Data to send
+</ParamField>
+
+<ParamField path="output_var" type="string" default="UDP_RESPONSE">
+  Variable name to store response
+</ParamField>
+
+<ParamField path="timeout_ms" type="number" default="5000">
+  Response timeout in milliseconds
+</ParamField>
+
+<ParamField path="capture" type="boolean" default="false">
+  Capture as user-visible variable
+</ParamField>
+
+### Example
+
+```json
+{
+  "block_type": "UdpRequest",
+  "label": "DNS Query",
+  "settings": {
+    "type": "UdpRequest",
+    "host": "8.8.8.8",
+    "port": 53,
+    "data": "<data.DNS_QUERY>"
+  }
+}
+```
+
+## FtpRequest
+
+Perform FTP file operations.
+
+### Settings
+
+<ParamField path="host" type="string" required>
+  FTP server hostname
+</ParamField>
+
+<ParamField path="port" type="number" default="21" required>
+  FTP port
+</ParamField>
+
+<ParamField path="username" type="string" required>
+  FTP username
+</ParamField>
+
+<ParamField path="password" type="string" required>
+  FTP password
+</ParamField>
+
+<ParamField path="command" type="string" default="LIST">
+  FTP command:
+  - `LIST` - List directory contents
+  - `RETR` - Download file
+  - `STOR` - Upload file
+  - `DELE` - Delete file
+  - `MKD` - Create directory
+  - `RMD` - Remove directory
+  - `CWD` - Change directory
+</ParamField>
+
+<ParamField path="remote_path" type="string">
+  Remote file/directory path (for RETR, STOR, DELE, MKD, RMD, CWD)
+</ParamField>
+
+<ParamField path="local_path" type="string">
+  Local file path for upload (STOR)
+</ParamField>
+
+<ParamField path="output_dir" type="string">
+  Local directory for download (RETR)
+</ParamField>
+
+<ParamField path="output_var" type="string" default="FTP_RESPONSE">
+  Variable name to store result
+</ParamField>
+
+<ParamField path="timeout_ms" type="number" default="10000">
+  Operation timeout
+</ParamField>
+
+<ParamField path="capture" type="boolean" default="false">
+  Capture as user-visible variable
+</ParamField>
+
+### Example
+
+```json
+{
+  "block_type": "FtpRequest",
+  "label": "List Files",
+  "settings": {
+    "type": "FtpRequest",
+    "host": "ftp.example.com",
+    "port": 21,
+    "username": "<input.USER>",
+    "password": "<input.PASS>",
+    "command": "LIST",
+    "remote_path": "/public"
+  }
+}
+```
+
+## SshRequest
+
+Execute commands over SSH.
+
+### Settings
+
+<ParamField path="host" type="string" required>
+  SSH server hostname
+</ParamField>
+
+<ParamField path="port" type="number" default="22" required>
+  SSH port
+</ParamField>
+
+<ParamField path="username" type="string" required>
+  SSH username
+</ParamField>
+
+<ParamField path="password" type="string" required>
+  SSH password
+</ParamField>
+
+<ParamField path="command" type="string" default="banner">
+  Command to execute (or "banner" to get SSH banner)
+</ParamField>
+
+<ParamField path="output_var" type="string" default="SSH_RESPONSE">
+  Variable name to store output
+</ParamField>
+
+<ParamField path="timeout_ms" type="number" default="10000">
+  Command timeout
+</ParamField>
+
+<ParamField path="capture" type="boolean" default="false">
+  Capture as user-visible variable
+</ParamField>
+
+### Example
+
+```json
+{
+  "block_type": "SshRequest",
+  "label": "Run Command",
+  "settings": {
+    "type": "SshRequest",
+    "host": "server.example.com",
+    "port": 22,
+    "username": "<input.USER>",
+    "password": "<input.PASS>",
+    "command": "whoami",
+    "capture": true
+  }
+}
+```
+
+## ImapRequest
+
+Interact with IMAP email servers.
+
+### Settings
+
+<ParamField path="host" type="string" required>
+  IMAP server hostname
+</ParamField>
+
+<ParamField path="port" type="number" default="993" required>
+  IMAP port (993 for SSL, 143 for plain)
+</ParamField>
+
+<ParamField path="username" type="string" required>
+  Email address or username
+</ParamField>
+
+<ParamField path="password" type="string" required>
+  Email password
+</ParamField>
+
+<ParamField path="use_tls" type="boolean" default="true">
+  Use SSL/TLS encryption
+</ParamField>
+
+<ParamField path="ssl_verify" type="boolean" default="true">
+  Verify SSL certificates
+</ParamField>
+
+<ParamField path="command" type="string" default="LOGIN">
+  IMAP command:
+  - `LOGIN` - Test login
+  - `SELECT` - Select mailbox
+  - `FETCH` - Fetch message
+  - `SEARCH` - Search messages
+</ParamField>
+
+<ParamField path="mailbox" type="string" default="INBOX">
+  Mailbox name (for SELECT/FETCH/SEARCH)
+</ParamField>
+
+<ParamField path="message_num" type="number" default="1">
+  Message number (for FETCH)
+</ParamField>
+
+<ParamField path="output_var" type="string" default="IMAP_RESPONSE">
+  Variable name to store result
+</ParamField>
+
+<ParamField path="timeout_ms" type="number" default="10000">
+  Operation timeout
+</ParamField>
+
+<ParamField path="capture" type="boolean" default="false">
+  Capture as user-visible variable
+</ParamField>
+
+### Example
+
+```json
+{
+  "block_type": "ImapRequest",
+  "label": "Check Email",
+  "settings": {
+    "type": "ImapRequest",
+    "host": "imap.gmail.com",
+    "port": 993,
+    "username": "<input.USER>",
+    "password": "<input.PASS>",
+    "use_tls": true,
+    "command": "LOGIN"
+  }
+}
+```
+
+## SmtpRequest
+
+Send emails via SMTP.
+
+### Settings
+
+<ParamField path="host" type="string" required>
+  SMTP server hostname
+</ParamField>
+
+<ParamField path="port" type="number" default="587" required>
+  SMTP port (587 for STARTTLS, 465 for SSL, 25 for plain)
+</ParamField>
+
+<ParamField path="username" type="string" required>
+  SMTP username
+</ParamField>
+
+<ParamField path="password" type="string" required>
+  SMTP password
+</ParamField>
+
+<ParamField path="use_tls" type="boolean" default="true">
+  Use STARTTLS
+</ParamField>
+
+<ParamField path="ssl_verify" type="boolean" default="true">
+  Verify SSL certificates
+</ParamField>
+
+<ParamField path="command" type="string" default="EHLO">
+  SMTP command to send
+</ParamField>
+
+<ParamField path="action" type="string" default="VERIFY">
+  Action type:
+  - `VERIFY` - Just test login
+  - `SEND_EMAIL` - Send actual email
+</ParamField>
+
+<ParamField path="from" type="string">
+  Sender email (defaults to username)
+</ParamField>
+
+<ParamField path="to" type="string">
+  Recipient emails (comma-separated)
+</ParamField>
+
+<ParamField path="subject" type="string">
+  Email subject
+</ParamField>
+
+<ParamField path="body_template" type="string">
+  Email body (supports variable interpolation)
+</ParamField>
+
+<ParamField path="output_var" type="string" default="SMTP_RESPONSE">
+  Variable name to store result
+</ParamField>
+
+<ParamField path="timeout_ms" type="number" default="10000">
+  Operation timeout
+</ParamField>
+
+<ParamField path="capture" type="boolean" default="false">
+  Capture as user-visible variable
+</ParamField>
+
+### Example
+
+```json
+{
+  "block_type": "SmtpRequest",
+  "label": "Send Email",
+  "settings": {
+    "type": "SmtpRequest",
+    "host": "smtp.gmail.com",
+    "port": 587,
+    "username": "sender@example.com",
+    "password": "<data.APP_PASSWORD>",
+    "action": "SEND_EMAIL",
+    "to": "recipient@example.com",
+    "subject": "Test Email",
+    "body_template": "Hello from IronBullet!"
+  }
+}
+```
+
+## PopRequest
+
+Retrieve emails via POP3.
+
+### Settings
+
+<ParamField path="host" type="string" required>
+  POP3 server hostname
+</ParamField>
+
+<ParamField path="port" type="number" default="995" required>
+  POP3 port (995 for SSL, 110 for plain)
+</ParamField>
+
+<ParamField path="username" type="string" required>
+  Email address or username
+</ParamField>
+
+<ParamField path="password" type="string" required>
+  Email password
+</ParamField>
+
+<ParamField path="use_tls" type="boolean" default="true">
+  Use SSL/TLS
+</ParamField>
+
+<ParamField path="ssl_verify" type="boolean" default="true">
+  Verify SSL certificates
+</ParamField>
+
+<ParamField path="command" type="string" default="STAT">
+  POP3 command:
+  - `STAT` - Get mailbox statistics
+  - `RETR` - Retrieve message
+  - `DELE` - Delete message
+</ParamField>
+
+<ParamField path="message_num" type="number" default="1">
+  Message number (for RETR/DELE)
+</ParamField>
+
+<ParamField path="output_var" type="string" default="POP_RESPONSE">
+  Variable name to store result
+</ParamField>
+
+<ParamField path="timeout_ms" type="number" default="10000">
+  Operation timeout
+</ParamField>
+
+<ParamField path="capture" type="boolean" default="false">
+  Capture as user-visible variable
+</ParamField>
+
+### Example
+
+```json
+{
+  "block_type": "PopRequest",
+  "label": "Get Email Count",
+  "settings": {
+    "type": "PopRequest",
+    "host": "pop.gmail.com",
+    "port": 995,
+    "username": "<input.USER>",
+    "password": "<input.PASS>",
+    "command": "STAT"
+  }
+}
+```

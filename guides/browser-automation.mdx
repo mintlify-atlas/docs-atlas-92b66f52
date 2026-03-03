@@ -1,0 +1,373 @@
+---
+title: 'Browser Automation'
+description: 'Use headless Chrome for JavaScript rendering, Cloudflare bypass, and complex user flows'
+---
+
+Some websites render content with JavaScript or use bot protection (Cloudflare, reCAPTCHA). IronBullet's browser automation blocks use headless Chromium via the `chromiumoxide` library to interact with these sites.
+
+## When to Use Browser Blocks
+
+**Use browser automation when:**
+- The site uses JavaScript to render content
+- You need to solve CAPTCHAs visually
+- The login flow requires multiple clicks/interactions
+- Standard HTTP requests return Cloudflare challenges
+
+**Don't use browser automation when:**
+- Simple HTTP requests work fine (5-10x faster)
+- You're checking thousands of accounts (too slow)
+- The site has a documented API
+
+<Warning>
+  Browser automation is 10-20x slower than HTTP requests. Use it only when necessary.
+</Warning>
+
+## Browser Automation Blocks
+
+| Block | Purpose |
+|-------|--------|
+| **BrowserOpen** | Launch headless Chromium |
+| **NavigateTo** | Open a URL |
+| **ClickElement** | Click a button/link |
+| **TypeText** | Fill an input field |
+| **WaitForElement** | Wait for element to appear |
+| **GetElementText** | Extract text/attribute |
+| **Screenshot** | Capture page/element image |
+| **ExecuteJs** | Run JavaScript code |
+
+<Steps>
+  <Step title="Add BrowserOpen Block">
+    Drag **BrowserOpen** from the palette to start your pipeline.
+
+    Configure:
+    ```yaml
+    Label: Launch Browser
+    Headless: true
+    Browser Type: chromium
+    Proxy: <leave empty for now>
+    Extra Args: --disable-blink-features=AutomationControlled
+    ```
+
+    **Extra args** hide automation flags to avoid detection.
+
+    Common args:
+    ```
+    --disable-blink-features=AutomationControlled
+    --disable-dev-shm-usage
+    --no-sandbox
+    --window-size=1920,1080
+    ```
+  </Step>
+
+  <Step title="Navigate to Login Page">
+    Add **NavigateTo** block:
+
+    ```yaml
+    Label: Open Login Page
+    URL: https://example.com/login
+    Wait Until: load
+    Timeout: 30000 (ms)
+    ```
+
+    After navigation:
+    - `data.SOURCE` contains the page HTML
+    - `data.ADDRESS` contains the current URL
+
+    Use these for KeyCheck conditions later.
+  </Step>
+
+  <Step title="Fill Login Form">
+    Add **TypeText** blocks for username and password:
+
+    **Username field:**
+    ```yaml
+    Label: Enter Username
+    Selector: input[name="email"]
+    Text: <input.USER>
+    Clear First: true
+    Delay: 50 (ms per keystroke)
+    ```
+
+    **Password field:**
+    ```yaml
+    Label: Enter Password
+    Selector: input[type="password"]
+    Text: <input.PASS>
+    Clear First: true
+    Delay: 50
+    ```
+
+    **Selectors** can be:
+    - CSS: `input[name="email"]`, `#login-btn`, `.submit-button`
+    - Text-based: `//button[contains(text(), 'Sign In')]`
+  </Step>
+
+  <Step title="Submit the Form">
+    Add **ClickElement** block:
+
+    ```yaml
+    Label: Click Login
+    Selector: button[type="submit"]
+    Wait For Navigation: true
+    Timeout: 5000
+    ```
+
+    If the button triggers a page load, enable **Wait For Navigation** to wait for the response.
+  </Step>
+
+  <Step title="Wait for Result">
+    Some sites show success/error messages after a delay.
+
+    Add **WaitForElement**:
+
+    ```yaml
+    Label: Wait for Dashboard
+    Selector: .dashboard-container
+    State: visible
+    Timeout: 10000
+    ```
+
+    If the element doesn't appear within 10s, the block throws an error (caught by safe mode or triggers Retry).
+  </Step>
+
+  <Step title="Extract Data">
+    Add **GetElementText** to capture account info:
+
+    ```yaml
+    Label: Get Username
+    Selector: .user-profile .username
+    Attribute: innerText
+    Output Variable: ACCOUNT_NAME
+    Capture: true
+    ```
+
+    **Attributes:**
+    - `innerText` - visible text
+    - `textContent` - all text (including hidden)
+    - `value` - input field value
+    - `href` - link URL
+    - `src` - image URL
+    - Any custom attribute: `data-user-id`
+  </Step>
+
+  <Step title="Check Success with KeyCheck">
+    Add **KeyCheck** to classify the result:
+
+    ```yaml
+    Keychain 1 (Success):
+      Conditions:
+        - data.ADDRESS Contains "dashboard"
+        - ACCOUNT_NAME Exists
+
+    Keychain 2 (Fail):
+      Conditions:
+        - data.SOURCE Contains "Invalid credentials"
+        - data.ADDRESS Contains "login?error="
+    ```
+
+    Use `data.ADDRESS` to check URL changes (common pattern after login).
+  </Step>
+
+  <Step title="Optional: Take Screenshot">
+    For debugging, capture a screenshot:
+
+    ```yaml
+    Label: Capture Error Screen
+    Full Page: false
+    Selector: (leave empty for full viewport)
+    Output Variable: SCREENSHOT
+    ```
+
+    The screenshot is saved as base64 in the variable. Useful for:
+    - Manual review of failures
+    - Detecting CAPTCHAs visually
+    - Debugging layout issues
+  </Step>
+
+  <Step title="Test Your Pipeline">
+    Press **F5** to debug.
+
+    **Watch the browser window** (if headless: false):
+    - Does it find the login form?
+    - Are credentials typed correctly?
+    - Does the submit button click?
+
+    Check the **Response Viewer**:
+    - `data.SOURCE` shows the final page HTML
+    - `data.ADDRESS` shows the final URL
+    - Variables show extracted data
+
+    Fix any selector issues before running at scale.
+  </Step>
+</Steps>
+
+## Real-World Example: Cloudflare Bypass
+
+Cloudflare's challenge page uses JavaScript. Browser automation can solve it:
+
+```yaml
+Pipeline:
+  1. BrowserOpen
+     Headless: true
+     Extra Args: --disable-blink-features=AutomationControlled
+
+  2. NavigateTo
+     URL: https://protected-site.com/login
+     Wait Until: load
+
+  3. WaitForElement (wait for CF to finish)
+     Selector: input[name="username"]
+     State: visible
+     Timeout: 15000
+
+  4. TypeText (username)
+  5. TypeText (password)
+  6. ClickElement (submit)
+  7. WaitForElement (dashboard)
+  8. GetElementText (balance)
+  9. KeyCheck (Success if balance exists)
+```
+
+The 15-second wait in step 3 gives Cloudflare time to complete the challenge. Once the challenge passes, the login form appears.
+
+## Using Proxies with Browser Blocks
+
+Set the proxy in **BrowserOpen**:
+
+```yaml
+BrowserOpen:
+  Proxy: http://username:password@proxy.example.com:8080
+```
+
+For rotating proxies, use a variable:
+
+```yaml
+BrowserOpen:
+  Proxy: <CURRENT_PROXY>
+```
+
+Set `CURRENT_PROXY` in a startup block or Script block that fetches from your proxy pool.
+
+<Warning>
+  Each BrowserOpen creates a new browser instance. Don't open/close browsers per request - it's very slow. Reuse the same browser throughout the pipeline.
+</Warning>
+
+## Advanced: Execute JavaScript
+
+Some interactions require JavaScript:
+
+```yaml
+ExecuteJs:
+  Label: Solve Math CAPTCHA
+  Code: |
+    const a = parseInt(document.querySelector('.captcha-a').innerText);
+    const b = parseInt(document.querySelector('.captcha-b').innerText);
+    return (a + b).toString();
+  Output Variable: CAPTCHA_ANSWER
+  Capture: false
+```
+
+Then use `<CAPTCHA_ANSWER>` in a TypeText block.
+
+**Common JS tasks:**
+- Extract data from `window.INITIAL_STATE`
+- Trigger events: `document.querySelector('.btn').click()`
+- Modify the page: `document.body.style.display = 'none'`
+- Solve simple math CAPTCHAs
+
+## Implementation Details
+
+Browser blocks are implemented in `src/pipeline/engine/browser.rs`:
+
+```rust
+pub async fn execute_browser_open(
+    &mut self,
+    settings: &BrowserOpenSettings
+) -> Result<()> {
+    let mut builder = BrowserConfig::builder();
+    if !settings.headless {
+        builder = builder.with_head();
+    }
+    if !settings.proxy.is_empty() {
+        let proxy = self.variables.interpolate(&settings.proxy);
+        builder = builder.arg(format!("--proxy-server={}", proxy));
+    }
+    let (browser, mut handler) = Browser::launch(config).await?;
+    tokio::spawn(async move {
+        while handler.next().await.is_some() {}
+    });
+    self.browser = BrowserHandle(Some(browser));
+    Ok(())
+}
+```
+
+**Key points:**
+- Uses `chromiumoxide` crate (CDP protocol)
+- Spawns a background task for CDP event handling
+- Browser handle persists across blocks in the same pipeline run
+
+## Performance Tips
+
+1. **Use headless mode** (headless: true) - 20-30% faster than windowed
+2. **Disable images** - add `--blink-settings=imagesEnabled=false` to Extra Args
+3. **Lower thread count** - browsers are memory-intensive (max 10-20 concurrent)
+4. **Reuse browser instances** - don't open/close per account
+5. **Combine with HTTP** - use browser only for login, then switch to HTTP for data extraction
+
+## Troubleshooting
+
+### "No browser open" Error
+
+**Cause:** Missing BrowserOpen block
+
+**Fix:** Add BrowserOpen as the first block in your pipeline.
+
+### Element Not Found
+
+**Cause:** Selector is wrong or element hasn't loaded yet
+
+**Fix:**
+1. Add WaitForElement before interacting
+2. Check the selector in Chrome DevTools (F12 → Elements → Copy Selector)
+3. Increase timeout values
+
+### Cloudflare Still Blocking
+
+**Try:**
+1. Add `--disable-blink-features=AutomationControlled` to Extra Args
+2. Use residential proxies (datacenter IPs often blocked)
+3. Add random delays between actions
+4. Set a realistic User-Agent in Browser Settings (footer panel)
+
+### Browser Crashes or Hangs
+
+**Solutions:**
+- Lower thread count (browsers use 200-500MB RAM each)
+- Add `--disable-dev-shm-usage` to Extra Args
+- Close unused browser tabs with JavaScript
+- Restart the job periodically
+
+## Tips
+
+<Tip>
+  Use **WaitForElement** generously. Page loads aren't instant, and clicking before elements appear causes errors.
+</Tip>
+
+<Warning>
+  Don't run 100+ threads with browser automation. Stick to 5-20 threads max, depending on your RAM.
+</Warning>
+
+<Note>
+  Browser automation updates `data.SOURCE` after each navigation. You can use ParseJSON/ParseRegex on the HTML just like HTTP responses.
+</Note>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Working with Proxies" icon="network-wired" href="/guides/working-with-proxies">
+    Configure proxies for browser blocks
+  </Card>
+  <Card title="Credential Checking" icon="key" href="/guides/credential-checking">
+    Advanced KeyCheck patterns for browser-based logins
+  </Card>
+</CardGroup>
